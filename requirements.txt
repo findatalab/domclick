@@ -1,0 +1,6 @@
+openpyxl>=3.1,<4
+requests>=2.31,<3
+Pillow>=10,<13
+pandas
+matplotlib
+scikit-learn
