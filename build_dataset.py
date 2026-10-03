@@ -20,6 +20,10 @@ from PIL import Image
 LOG = logging.getLogger('domclick')
 CARD = re.compile(r'https://(?:[\w-]+\.)?domclick\.ru/card/(sale__[\w]+__(\d+))')
 NUM = r'\d[\d\s\u00a0\u202f]*(?:[.,]\d+)?'
+MILLION = 1_000_000
+# Asking-price range applied to the merged listings; amounts are in rubles.
+DEFAULT_MIN_PRICE_RUB = 0
+DEFAULT_MAX_PRICE_RUB = 50 * MILLION
 
 
 def number(value):
@@ -139,6 +143,27 @@ def collect(folder, out, recursive=False):
             finally:
                 book.close()
     return list(objects.values()), {'files_read': files, 'rows_without_listing': skipped}
+
+
+def filter_by_price(records, min_price, max_price):
+    """Keep listings whose asking price is inside [min_price, max_price] rubles.
+
+    A zero ``max_price`` disables the upper bound. Listings without a parsed price
+    are dropped and counted separately: an unknown price cannot be verified against
+    the requested range.
+    """
+    kept, below, above, missing = [], 0, 0, 0
+    for record in records:
+        price = record.get('asking_price_rub')
+        if price is None:
+            missing += 1
+        elif price < min_price:
+            below += 1
+        elif max_price and price > max_price:
+            above += 1
+        else:
+            kept.append(record)
+    return kept, {'below_min': below, 'above_max': above, 'missing_price': missing}
 
 
 def retry_after(value):
@@ -261,16 +286,37 @@ def main():
     parser.add_argument('--max-wait', type=float, default=900)
     parser.add_argument('--max-image-mb', type=float, default=30)
     parser.add_argument('--max-photos', type=int, default=0, help='Per listing; 0 = all')
+    parser.add_argument('--min-price', type=float, default=DEFAULT_MIN_PRICE_RUB,
+                        help=f'Minimum asking price in rubles (default {DEFAULT_MIN_PRICE_RUB})')
+    parser.add_argument('--max-price', type=float, default=DEFAULT_MAX_PRICE_RUB,
+                        help='Maximum asking price in rubles; 0 = no upper bound '
+                             f'(default {DEFAULT_MAX_PRICE_RUB})')
     parser.add_argument('--user-agent', default='DomclickResearchDataset/1.0 (Python requests; image download)')
     args = parser.parse_args()
     if not args.input.is_dir():
         parser.error('Input directory does not exist')
     if not 0 <= args.delay_min <= args.delay_max or args.retries < 0 or args.max_photos < 0 or args.max_image_mb <= 0 or args.max_wait < 0:
         parser.error('Invalid limits or delays')
+    if args.min_price < 0 or (args.max_price and args.max_price < args.min_price):
+        parser.error('Invalid price range')
     args.output.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s',
                         handlers=[logging.StreamHandler(), logging.FileHandler(args.output / 'run.log', encoding='utf-8')])
     records, summary = collect(args.input, args.output, args.recursive)
+    before_price = len(records)
+    records, price_removed = filter_by_price(records, args.min_price, args.max_price)
+    summary['price_filter'] = {
+        'min_price_rub': args.min_price, 'max_price_rub': args.max_price or None,
+        'objects_before': before_price, 'objects_kept': len(records),
+        'objects_removed_below_min': price_removed['below_min'],
+        'objects_removed_above_max': price_removed['above_max'],
+        'objects_removed_missing_price': price_removed['missing_price'],
+    }
+    LOG.info('Price filter [%s, %s] rub: kept %s of %s listings (below min %s, above max %s, no price %s)',
+             args.min_price, args.max_price or 'inf', len(records), before_price,
+             price_removed['below_min'], price_removed['above_max'], price_removed['missing_price'])
+    if not records:
+        LOG.warning('Price filter removed every listing; nothing to save')
     previous = {}
     if (args.output / 'objects.jsonl').exists():
         for line in (args.output / 'objects.jsonl').read_text(encoding='utf-8').splitlines():
