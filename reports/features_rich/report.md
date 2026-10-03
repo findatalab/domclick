@@ -1,16 +1,16 @@
 # Широкий набор признаков из структурированных полей
 
-Источник: `C:\Users\developer\projects\domclick\data\dataset\objects.jsonl`
-Матрица: `C:\Users\developer\projects\domclick\data\features\features_rich.csv`
-Строк: **1,858**; колонок всего: **107** (признаков **103**, плюс `listing_id`, цель `asking_price_rub`, вариант цели `log_asking_price_rub` и ключ групп `group_locality`).
-Признаки: **22** числовых и **81** бинарных.
+Источник: `C:\Users\andrej\projects\finun\domclick\data\dataset\objects.jsonl`
+Матрица: `C:\Users\andrej\projects\finun\domclick\data\features\features_rich.csv`
+Строк: **1,144**; колонок всего: **103** (признаков **99**, плюс `listing_id`, цель `asking_price_rub`, вариант цели `log_asking_price_rub` и ключ групп `group_locality`).
+Признаки: **22** числовых и **77** бинарных.
 Битых строк JSON: **0**; строк без положительной цены отброшено: **0**.
 Текстовые флаги из описания: включены.
 
 ## Группы признаков
 | Группа | Колонок |
 | --- | --- |
-| categorical | 25 |
+| categorical | 21 |
 | badges | 8 |
 | derived | 7 |
 | tags_seller | 7 |
@@ -47,16 +47,15 @@
 - `locality_url` — используется только глубина и слаг
 - `description` — используется только через текстовые флаги
 - `address_fragment` — используется только структура (число частей, наличие номера)
-Константные и неинформативные колонки, удалённые автоматически: `object_type`, `price_type`, `currency`, `settlement_type_other`.
+Константные и неинформативные колонки, удалённые автоматически: `object_type`, `price_type`, `currency`, `settlement_type_village`, `settlement_type_other`.
 
 ## Пропуски
 Пропуски **не заполняются**: NaN остаётся в матрице, потому что `HistGradientBoostingRegressor`, XGBoost и LightGBM обрабатывают NaN сами, а заполнение до разбиения на фолды переносит информацию из теста в обучение. Рядом с каждым неполным полем добавлен индикатор пропуска (`*_missing`), чтобы линейные модели тоже могли использовать этот сигнал. Для линейных моделей заполните NaN медианой, посчитанной **только на обучающей части** каждого фолда.
 
-Колонки с покрытием ниже 50 % (2):
+Колонки с покрытием ниже 50 % (1):
 | Колонка | Покрытие, % | Заполнено | Группа |
 | --- | --- | --- | --- |
-| description_exclamations | 44,941 | 835 | text_structure |
-| badge_mortgage_discount_pct | 46,825 | 870 | badges |
+| description_exclamations | 48,339 | 553 | text_structure |
 
 ## Как обучать на этой матрице
 1. Целевая переменная: `log_asking_price_rub` для скошенного распределения (`skew` цены ≈ 9,8) — метрики затем пересчитывайте обратно через `expm1`.
@@ -84,7 +83,7 @@
 `badge_mortgage_discount_pct` коррелирует с ценой на уровне 0,82 (Спирмен), что необъяснимо для скидки 0,3–1,1 %. Разрез по градациям показывает, что признак не монотонен по цене: медиана 16 млн ₽ при 0,3 %, 57 млн ₽ при 0,8 % и 89 млн ₽ при 0,5 % (всего 7 строк). Похоже, градация скидки определяется договором продавца, а не свойством дома, и потому работает прокси сегмента рынка. Признак доступен в момент публикации и не является утечкой цели, но метрики могут быть завышены, если один продавец встречается и в обучении, и в тесте. Проверяйте устойчивость, обучая модель без `badge_*`.
 
 ## Файлы
-- Матрица признаков: `C:\Users\developer\projects\domclick\data\features\features_rich.csv`
-- Словарь признаков: `C:\Users\developer\projects\domclick\reports\features_rich\feature_dictionary.csv`
-- Покрытие и статистика: `C:\Users\developer\projects\domclick\reports\features_rich\feature_coverage.csv`
-- Отчёт: `C:\Users\developer\projects\domclick\reports\features_rich\report.md`
+- Матрица признаков: `C:\Users\andrej\projects\finun\domclick\data\features\features_rich.csv`
+- Словарь признаков: `C:\Users\andrej\projects\finun\domclick\reports\features_rich\feature_dictionary.csv`
+- Покрытие и статистика: `C:\Users\andrej\projects\finun\domclick\reports\features_rich\feature_coverage.csv`
+- Отчёт: `C:\Users\andrej\projects\finun\domclick\reports\features_rich\report.md`

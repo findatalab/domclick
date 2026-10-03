@@ -36,17 +36,14 @@ badge_owner,badges,flag,badges_platform_claimed,"метка платформы, 
 badge_only_domclick,badges,flag,badges_platform_claimed,"метка платформы, слабый сигнал"
 badge_count,badges,count,badges_platform_claimed,число меток без учёта «Выгодной цены» (она исключена как утечка)
 badge_mortgage_discount_pct,badges,numeric,badges_platform_claimed,"максимальная скидка на ипотеку, % (null если нет)"
-highway_00,categorical,one_hot,highway,уровень: боровское шоссе (84 строк)
-highway_01,categorical,one_hot,highway,уровень: варшавское шоссе (79 строк)
-highway_02,categorical,one_hot,highway,уровень: волоколамское шоссе (18 строк)
-highway_03,categorical,one_hot,highway,уровень: ильинское шоссе (11 строк)
-highway_04,categorical,one_hot,highway,уровень: калужское шоссе (623 строк)
-highway_05,categorical,one_hot,highway,уровень: киевское шоссе (450 строк)
-highway_06,categorical,one_hot,highway,уровень: минское шоссе (70 строк)
-highway_07,categorical,one_hot,highway,уровень: можайское шоссе (58 строк)
-highway_08,categorical,one_hot,highway,уровень: новорижское шоссе (19 строк)
-highway_09,categorical,one_hot,highway,уровень: симферопольское шоссе (184 строк)
-highway_other,categorical,one_hot,highway,"редкие уровни (13 шт., 50 строк)"
+highway_00,categorical,one_hot,highway,уровень: боровское шоссе (61 строк)
+highway_01,categorical,one_hot,highway,уровень: варшавское шоссе (78 строк)
+highway_02,categorical,one_hot,highway,уровень: волоколамское шоссе (15 строк)
+highway_03,categorical,one_hot,highway,уровень: калужское шоссе (379 строк)
+highway_04,categorical,one_hot,highway,уровень: киевское шоссе (278 строк)
+highway_05,categorical,one_hot,highway,уровень: минское шоссе (22 строк)
+highway_06,categorical,one_hot,highway,уровень: симферопольское шоссе (175 строк)
+highway_other,categorical,one_hot,highway,"редкие уровни (11 шт., 48 строк)"
 highway_unknown,categorical,one_hot,highway,поле не заполнено
 locality_type_snt,categorical,flag,locality,тип населённого пункта из названия
 locality_type_dnp,categorical,flag,locality,тип населённого пункта из названия
@@ -60,7 +57,6 @@ settlement_type_settlement,categorical,flag,settlement,тип посёлка и�
 settlement_type_snt,categorical,flag,settlement,тип посёлка из названия
 settlement_type_dnp,categorical,flag,settlement,тип посёлка из названия
 settlement_type_kp,categorical,flag,settlement,тип посёлка из названия
-settlement_type_village,categorical,flag,settlement,тип посёлка из названия
 address_parts,structure,count,address_fragment,число заполненных частей адреса
 address_has_number,structure,flag,address_fragment,есть номер дома
 locality_url_depth,structure,count,locality_url,глубина ссылки: район/СНТ/населённый пункт
@@ -104,4 +100,4 @@ description_exclamations,text_structure,count,description,восклицател
 description_has_phone,text_structure,flag,description,в описании похоже на телефон
 asking_price_rub,target,target,asking_price_rub,"цена предложения, ₽ — не цена сделки"
 log_asking_price_rub,target,target,asking_price_rub,логарифм цены: вариант цели для скошенного распределения
-group_locality,bookkeeping,group_key,locality,"ключ для GroupKFold (662 групп), не признак"
+group_locality,bookkeeping,group_key,locality,"ключ для GroupKFold (525 групп), не признак"
