@@ -1,0 +1,118 @@
+﻿column,group,kind,source_field,note
+llm_location_text_present,llm_location,llm_flag,llm:features,в тексте названо значение этого поля
+llm_highway_present,llm_location,llm_flag,llm:features,в тексте названо значение этого поля
+llm_distance_to_mkad_km,llm_location,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_access_road_present,llm_location,llm_flag,llm:features,в тексте названо значение этого поля
+llm_house_area_m2,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_heated_area_m2,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_area_composition_present,llm_house,llm_flag,llm:features,в тексте названо значение этого поля
+llm_floors,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_basement_present,llm_house,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_bedrooms,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_bathrooms,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_construction_year,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_renovation_year,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_renovation_details_present,llm_house,llm_flag,llm:features,в тексте названо значение этого поля
+llm_finishing_stage_none,llm_house,llm_enum,llm:features,допустимое значение поля: none
+llm_finishing_stage_pre_finish,llm_house,llm_enum,llm:features,допустимое значение поля: pre_finish
+llm_finishing_stage_finished,llm_house,llm_enum,llm:features,допустимое значение поля: finished
+llm_finishing_stage_partial,llm_house,llm_enum,llm:features,допустимое значение поля: partial
+llm_finishing_details_present,llm_house,llm_flag,llm:features,в тексте названо значение этого поля
+llm_year_round_living_claimed,llm_house,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_wall_material_00,llm_construction,one_hot,llm:features,уровень: бревно (11 строк)
+llm_wall_material_01,llm_construction,one_hot,llm:features,уровень: брус (54 строк)
+llm_wall_material_02,llm_construction,one_hot,llm:features,уровень: газобетон (17 строк)
+llm_wall_material_03,llm_construction,one_hot,llm:features,уровень: газобетонные блоки (21 строк)
+llm_wall_material_04,llm_construction,one_hot,llm:features,уровень: газоблок (20 строк)
+llm_wall_material_05,llm_construction,one_hot,llm:features,уровень: газоблоки (16 строк)
+llm_wall_material_06,llm_construction,one_hot,llm:features,уровень: дерево (11 строк)
+llm_wall_material_07,llm_construction,one_hot,llm:features,уровень: каркасный (25 строк)
+llm_wall_material_08,llm_construction,one_hot,llm:features,уровень: кирпич (117 строк)
+llm_wall_material_09,llm_construction,one_hot,llm:features,уровень: пеноблок (19 строк)
+llm_wall_material_10,llm_construction,one_hot,llm:features,уровень: пеноблоки (11 строк)
+llm_wall_material_other,llm_construction,one_hot,llm:features,"редкие уровни (259 шт., 398 строк)"
+llm_wall_material_unknown,llm_construction,one_hot,llm:features,поле не заполнено
+llm_wall_thickness_mm,llm_construction,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_insulation_material_present,llm_construction,llm_flag,llm:features,в тексте названо значение этого поля
+llm_insulation_thickness_mm,llm_construction,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_foundation_type_00,llm_construction,one_hot,llm:features,уровень: ленточный (61 строк)
+llm_foundation_type_01,llm_construction,one_hot,llm:features,уровень: монолитная плита (30 строк)
+llm_foundation_type_02,llm_construction,one_hot,llm:features,уровень: свайно-ростверковый (15 строк)
+llm_foundation_type_other,llm_construction,one_hot,llm:features,"редкие уровни (183 шт., 263 строк)"
+llm_foundation_type_unknown,llm_construction,one_hot,llm:features,поле не заполнено
+llm_floor_structure_present,llm_construction,llm_flag,llm:features,в тексте названо значение этого поля
+llm_roof_covering_00,llm_construction,one_hot,llm:features,уровень: металлочерепица (117 строк)
+llm_roof_covering_01,llm_construction,one_hot,llm:features,уровень: мягкая (10 строк)
+llm_roof_covering_02,llm_construction,one_hot,llm:features,уровень: мягкая кровля (17 строк)
+llm_roof_covering_03,llm_construction,one_hot,llm:features,уровень: мягкая черепица (30 строк)
+llm_roof_covering_other,llm_construction,one_hot,llm:features,"редкие уровни (100 шт., 144 строк)"
+llm_roof_covering_unknown,llm_construction,one_hot,llm:features,поле не заполнено
+llm_electricity_connected,llm_utilities,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_electricity_power_kw,llm_utilities,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_electricity_phases,llm_utilities,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_gas_status_connected,llm_utilities,llm_enum,llm:features,допустимое значение поля: connected
+llm_gas_status_at_boundary,llm_utilities,llm_enum,llm:features,допустимое значение поля: at_boundary
+llm_gas_status_nearby,llm_utilities,llm_enum,llm:features,допустимое значение поля: nearby
+llm_gas_status_absent,llm_utilities,llm_enum,llm:features,допустимое значение поля: absent
+llm_water_source_00,llm_utilities,one_hot,llm:features,уровень: водопровод (16 строк)
+llm_water_source_01,llm_utilities,one_hot,llm:features,уровень: колодец (106 строк)
+llm_water_source_02,llm_utilities,one_hot,llm:features,уровень: летний водопровод (11 строк)
+llm_water_source_03,llm_utilities,one_hot,llm:features,уровень: скважина (158 строк)
+llm_water_source_04,llm_utilities,one_hot,llm:features,уровень: собственная скважина (12 строк)
+llm_water_source_05,llm_utilities,one_hot,llm:features,уровень: центральная (12 строк)
+llm_water_source_06,llm_utilities,one_hot,llm:features,уровень: центральное водоснабжение (66 строк)
+llm_water_source_07,llm_utilities,one_hot,llm:features,уровень: центральный (10 строк)
+llm_water_source_08,llm_utilities,one_hot,llm:features,уровень: центральный водопровод (21 строк)
+llm_water_source_other,llm_utilities,one_hot,llm:features,"редкие уровни (199 шт., 265 строк)"
+llm_water_source_unknown,llm_utilities,one_hot,llm:features,поле не заполнено
+llm_water_connected,llm_utilities,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_sewage_type_00,llm_utilities,one_hot,llm:features,уровень: канализация (21 строк)
+llm_sewage_type_01,llm_utilities,one_hot,llm:features,уровень: септик (210 строк)
+llm_sewage_type_02,llm_utilities,one_hot,llm:features,уровень: централизованная (14 строк)
+llm_sewage_type_03,llm_utilities,one_hot,llm:features,уровень: центральная (13 строк)
+llm_sewage_type_04,llm_utilities,one_hot,llm:features,уровень: центральная канализация (80 строк)
+llm_sewage_type_other,llm_utilities,one_hot,llm:features,"редкие уровни (158 шт., 212 строк)"
+llm_sewage_type_unknown,llm_utilities,one_hot,llm:features,поле не заполнено
+llm_sewage_connected,llm_utilities,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_heating_type_00,llm_utilities,one_hot,llm:features,уровень: газовое отопление (17 строк)
+llm_heating_type_01,llm_utilities,one_hot,llm:features,уровень: газовый котел (17 строк)
+llm_heating_type_02,llm_utilities,one_hot,llm:features,уровень: печное (12 строк)
+llm_heating_type_03,llm_utilities,one_hot,llm:features,уровень: печь (17 строк)
+llm_heating_type_04,llm_utilities,one_hot,llm:features,уровень: электрическое (24 строк)
+llm_heating_type_other,llm_utilities,one_hot,llm:features,"редкие уровни (303 шт., 405 строк)"
+llm_heating_type_unknown,llm_utilities,one_hot,llm:features,поле не заполнено
+llm_heating_operational,llm_utilities,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_hot_water_system_present,llm_utilities,llm_flag,llm:features,в тексте названо значение этого поля
+llm_ventilation_type_present,llm_utilities,llm_flag,llm:features,в тексте названо значение этого поля
+llm_land_area_sotka,llm_land,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_land_category_00,llm_land,one_hot,llm:features,уровень: земли населенных пунктов (83 строк)
+llm_land_category_01,llm_land,one_hot,llm:features,уровень: земли населённых пунктов (28 строк)
+llm_land_category_other,llm_land,one_hot,llm:features,"редкие уровни (18 шт., 39 строк)"
+llm_land_category_unknown,llm_land,one_hot,llm:features,поле не заполнено
+llm_permitted_use_00,llm_land,one_hot,llm:features,уровень: для ведения садоводства (14 строк)
+llm_permitted_use_01,llm_land,one_hot,llm:features,уровень: для садоводства (19 строк)
+llm_permitted_use_02,llm_land,one_hot,llm:features,уровень: ижс (653 строк)
+llm_permitted_use_other,llm_land,one_hot,llm:features,"редкие уровни (27 шт., 58 строк)"
+llm_permitted_use_unknown,llm_land,one_hot,llm:features,поле не заполнено
+llm_terrain_present,llm_land,llm_flag,llm:features,в тексте названо значение этого поля
+llm_drainage_present,llm_land,llm_flag,llm:features,в тексте названо значение этого поля
+llm_fencing_present,llm_land,llm_flag,llm:features,в тексте названо значение этого поля
+llm_parking_present,llm_land,llm_flag,llm:features,в тексте названо значение этого поля
+llm_house_registration_claimed,llm_documents,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_heating_cost_rub_per_month,llm_costs,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_settlement_fee_rub_per_month,llm_costs,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_seller_type_00,llm_costs,one_hot,llm:features,уровень: агентство недвижимости (23 строк)
+llm_seller_type_01,llm_costs,one_hot,llm:features,уровень: застройщик (22 строк)
+llm_seller_type_02,llm_costs,one_hot,llm:features,уровень: собственник (141 строк)
+llm_seller_type_other,llm_costs,one_hot,llm:features,"редкие уровни (24 шт., 40 строк)"
+llm_seller_type_unknown,llm_costs,one_hot,llm:features,поле не заполнено
+llm_status_stated_count,llm_meta,llm_count,llm:features,сколько полей получили этот статус
+llm_status_planned_count,llm_meta,llm_count,llm:features,сколько полей получили этот статус
+llm_status_possible_count,llm_meta,llm_count,llm:features,сколько полей получили этот статус
+llm_status_unknown_count,llm_meta,llm_count,llm:features,сколько полей получили этот статус
+llm_additional_buildings_count,llm_meta,llm_count,llm:additional_buildings,сколько элементов перечислено: дополнительные строения
+llm_included_items_count,llm_meta,llm_count,llm:included_items,сколько элементов перечислено: включённое в продажу имущество
+llm_reported_problems_count,llm_meta,llm_count,llm:reported_problems,сколько элементов перечислено: сообщённые проблемы
+llm_conflicts_count,llm_meta,llm_count,llm:conflicts,сколько элементов перечислено: противоречия
+llm_ambiguities_count,llm_meta,llm_count,llm:ambiguities,сколько элементов перечислено: неоднозначности
+llm_evidence_count,llm_meta,llm_count,llm:features,сколько полей подкреплены цитатой

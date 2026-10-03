@@ -108,7 +108,8 @@ python -m venv .venv
 
 Все скрипты запускаются из корня репозитория. Скрипты анализа принимают `--input`
 (по умолчанию `data/dataset/objects.jsonl`), каталог отчётов — `--output-dir`
-(в `build_reach_features.py` — `--report-dir`) и `--verbose`. Сборщик датасета принимает
+(в `build_reach_features.py` и `build_reach_llm_features.py` — `--report-dir`)
+и `--verbose`. Сборщик датасета принимает
 позиционный путь к выгрузкам и `--output`.
 
 ### 0. Сборка датасета из выгрузок (опционально)
@@ -166,6 +167,104 @@ python build_reach_features.py
 `reports/features_rich/feature_dictionary.csv` описывает каждую колонку, а
 `feature_coverage.csv` — покрытие и статистику по ней.
 
+### 3.1. Признаки из текста объявления (DeepSeek API) → `data/features/features_llm.csv`, `reports/features_llm/`
+
+```bash
+python build_reach_llm_features.py --llm-limit 3   # пробный прогон на трёх объявлениях
+python build_reach_llm_features.py                 # полный прогон, кэш продолжает работу
+```
+
+Языковая модель извлекает из текста объявления по фиксированному системному промпту
+(`PROMPT_VERSION`) характеристики дома: площади, этажность, спальни и санузлы, год
+постройки и ремонта, материалы стен, фундамента и кровли, толщины, коммуникации
+(электричество, газ, вода, канализация, отопление, вентиляция), характеристики участка,
+документы, расходы, дополнительные строения, включённое в продажу имущество, сообщённые
+проблемы, противоречия и вопросы продавцу.
+
+Матрица содержит **только** ключ `listing_id` и признаки `llm_*` — структурных признаков
+в ней нет. Для обучения она соединяется со структурной матрицей из п. 3:
+
+```python
+structured = pd.read_csv("data/features/features_rich.csv")
+llm = pd.read_csv("data/features/features_llm.csv")
+matrix = structured.merge(llm, on="listing_id", how="left")
+```
+
+**Ключ API.** Скрипт обращается к DeepSeek API
+(`https://api.deepseek.com/chat/completions`, режим `response_format={"type":"json_object"}`).
+Ключ читается из `.env` (переменная `DEEPSEEK_API_KEY`) или из переменной окружения; сам
+ключ не логируется и не попадает ни в кэш, ни в отчёт. Подготовка:
+
+```bash
+cp .env.example .env              # затем впишите свой ключ в .env
+pip install -r requirements.txt   # добавляет python-dotenv
+```
+
+Модель и адрес задаются ключами `--model` (по умолчанию `deepseek-chat`), `--api-base-url`
+(`https://api.deepseek.com`), `--api-key-env` (`DEEPSEEK_API_KEY`), `--env-file` (`.env`),
+`--llm-temperature`. Текст объявления передаётся отдельным пользовательским сообщением.
+
+**Статус запросов в консоли.** Каждый запрос печатает строку вида
+`[3/1144 2074919436]  HTTP 200  попытка 1/3  8.4 с  токены 3369/2874  ok` — номер
+объявления, HTTP-код, номер попытки, время ответа, токены и результат (`ok`, `не JSON`,
+`некорректная схема`, `ошибка`, `ошибка сети`). Ключ `--verbose` дополнительно печатает
+объявления, взятые из кэша. В конце выводится сводка: сколько извлечено, сколько взято из
+кэша, сколько ответов не прошло схему и суммарный расход токенов. HTTP 401/402/403
+прерывают прогон с сообщением об ошибке ключа или баланса.
+
+**Проверка корректности JSON.** Каждый ответ разбирается и проверяется функцией
+`validate_extraction`: наличие всех обязательных ключей верхнего уровня, все 50 полей
+`features` и два поля `price_label`, допустимые статусы
+(`stated/planned/possible/unknown/conflicting`), правило «значение без дословной
+цитаты = null», правило `value=null, evidence=null` для `unknown`/`conflicting`, типы
+значений и допустимые перечисления. При нарушении схема ответа перезапрашивается
+(`--llm-retries`, по умолчанию 2) вместе с перечнем ошибок; если корректный JSON так и
+не получен, объявление заменяется валидной «пустой» схемой, а в матрице поднимается флаг
+`llm_extraction_failed`.
+
+**Кэш и возобновляемость.** Ответы складываются в `data/features/llm_extractions.jsonl`
+(ключ — `listing_id`, хеш текста, провайдер, модель и версия промпта). Повторный запуск не
+переспрашивает модель для неизменённых объявлений; `--llm-limit N` обрабатывает только
+первые N строк, `--llm-cache` задаёт другой файл кэша.
+
+`price_label` (цена и цена за м²) извлекается **только для аудита** и не становится
+признаком: цена — это целевая переменная. Покрытие и статусы по каждому полю пишутся в
+`reports/features_llm/llm_field_summary.csv`.
+
+### 3.2. Эмбеддинги описаний объявлений → `data/features/embeddings.csv`, `data/features/embeddings.npy`
+
+```bash
+ollama pull qwen3-embedding:8b      # один раз
+python build_embeddings.py --limit 4   # пробный прогон на четырёх объявлениях
+python build_embeddings.py             # полный прогон, кэш продолжает работу
+```
+
+Локальная модель `qwen3-embedding:8b` (Ollama, `POST /api/embed`) превращает описание
+объявления в вектор признаков. В `data/features/` появляются:
+
+- `embeddings.csv` — `listing_id` и колонки `emb_0000…emb_NNNN` (порядок строк как в датасете);
+- `embeddings.npy` — та же матрица без id, `float32`, для быстрой загрузки;
+- `embeddings_meta.json` — модель, размерность, счётчики, время;
+- `embeddings_cache.jsonl` — кэш векторов для возобновляемого прогона.
+
+Векторы по умолчанию L2-нормируются (модель обучена на косинусную близость), `--no-normalize`
+сохраняет их как есть. Объявления без описания получают NaN-вектор и считаются в отчёте.
+Каждый батч печатает строку статуса вида `[3/72]  HTTP 200  попытка 1/3  1.2 с  dim 4096  ok`;
+при отсутствии модели (HTTP 404) прогон останавливается с подсказкой `ollama pull …`.
+
+Настройки: `--model` (по умолчанию `qwen3-embedding:8b`), `--host`, `--batch-size` (16),
+`--limit`, `--retries`, `--timeout`, `--normalize/--no-normalize`, `--cache`.
+
+Для обучения матрица соединяется по `listing_id`:
+
+```python
+matrix = structured.merge(llm, on="listing_id", how="left")
+                   .merge(pd.read_csv("data/features/embeddings.csv"),
+                          on="listing_id", how="left")
+```
+
+Векторы — это представление текста, а не предсказание модели, поэтому утечки цели в них нет.
+
 ### 4. Базовая модель: линейная регрессия → `reports/lin_reg_2f/`
 
 ```bash
@@ -201,6 +300,8 @@ python train_histgb.py
 | EDA | `reports/eda/report.md` | `price_distribution.csv`, `numeric_summary.csv`, `outliers_iqr.csv`, `spearman_correlations.csv`, `figures/` |
 | Базовые признаки | `reports/features/report.md` | `feature_summary.csv`, `feature_correlations.csv` |
 | Широкие признаки | `reports/features_rich/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
+| Признаки из текста (DeepSeek) | `reports/features_llm/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `llm_field_summary.csv` |
+| Эмбеддинги описаний | `data/features/embeddings_meta.json` | `embeddings.csv`, `embeddings.npy`, `embeddings_cache.jsonl` |
 | Линейная модель | `reports/lin_reg_2f/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `coefficients.csv`, `predictions.csv` |
 | Бустинг | `reports/histgb/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `feature_importance.csv`, `predictions.csv`, `figures/` |
 

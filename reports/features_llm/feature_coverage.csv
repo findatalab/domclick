@@ -1,0 +1,118 @@
+﻿column,non_null,coverage_pct,unique,mean,std,min,max,group,kind,source_field,note
+llm_location_text_present,1144,100.0,2,0.9938811188811189,0.07801769676182994,0.0,1.0,llm_location,llm_flag,llm:features,в тексте названо значение этого поля
+llm_highway_present,1144,100.0,2,0.9449300699300699,0.22821647565398323,0.0,1.0,llm_location,llm_flag,llm:features,в тексте названо значение этого поля
+llm_distance_to_mkad_km,1050,91.78321678321679,75,32.26733333333333,14.72245451198014,0.2,105.0,llm_location,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_access_road_present,1144,100.0,2,0.38024475524475526,0.48565919833546767,0.0,1.0,llm_location,llm_flag,llm:features,в тексте названо значение этого поля
+llm_house_area_m2,1086,94.93006993006993,600,181.39393186003684,118.71603446691297,15.0,820.0,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_heated_area_m2,3,0.26223776223776224,2,352.50666666666666,155.00700027203072,173.52,442.0,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_area_composition_present,1144,100.0,2,0.16433566433566432,0.3707419614995464,0.0,1.0,llm_house,llm_flag,llm:features,в тексте названо значение этого поля
+llm_floors,1143,99.91258741258741,4,2.014873140857393,0.5894186311712798,1.0,4.0,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_basement_present,145,12.674825174825175,2,0.9862068965517241,0.11703554164296774,0.0,1.0,llm_house,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_bedrooms,496,43.35664335664335,10,3.6108870967741935,1.1528631110776664,1.0,10.0,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_bathrooms,464,40.55944055944056,8,2.25,0.9715165940119627,1.0,8.0,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_construction_year,205,17.91958041958042,33,2016.7951219512195,9.600192788595043,1960.0,2026.0,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_renovation_year,12,1.048951048951049,7,2020.1666666666667,6.176691278630911,2004.0,2025.0,llm_house,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_renovation_details_present,1144,100.0,2,0.10402097902097902,0.30542127511034545,0.0,1.0,llm_house,llm_flag,llm:features,в тексте названо значение этого поля
+llm_finishing_stage_none,1144,100.0,2,0.062062937062937064,0.24137534521530013,0.0,1.0,llm_house,llm_enum,llm:features,допустимое значение поля: none
+llm_finishing_stage_pre_finish,1144,100.0,2,0.14248251748251747,0.3496972189279466,0.0,1.0,llm_house,llm_enum,llm:features,допустимое значение поля: pre_finish
+llm_finishing_stage_finished,1144,100.0,2,0.20017482517482518,0.40030605639715955,0.0,1.0,llm_house,llm_enum,llm:features,допустимое значение поля: finished
+llm_finishing_stage_partial,1144,100.0,2,0.06555944055944056,0.24761865305065248,0.0,1.0,llm_house,llm_enum,llm:features,допустимое значение поля: partial
+llm_finishing_details_present,1144,100.0,2,0.40472027972027974,0.49105249730444617,0.0,1.0,llm_house,llm_flag,llm:features,в тексте названо значение этого поля
+llm_year_round_living_claimed,413,36.1013986013986,2,0.9709443099273608,0.1681663799845486,0.0,1.0,llm_house,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_wall_material_00,1144,100.0,2,0.009615384615384616,0.0976281748037547,0.0,1.0,llm_construction,one_hot,llm:features,уровень: бревно (11 строк)
+llm_wall_material_01,1144,100.0,2,0.0472027972027972,0.21216512691069944,0.0,1.0,llm_construction,one_hot,llm:features,уровень: брус (54 строк)
+llm_wall_material_02,1144,100.0,2,0.01486013986013986,0.12104595781806347,0.0,1.0,llm_construction,one_hot,llm:features,уровень: газобетон (17 строк)
+llm_wall_material_03,1144,100.0,2,0.018356643356643356,0.1342960991542222,0.0,1.0,llm_construction,one_hot,llm:features,уровень: газобетонные блоки (21 строк)
+llm_wall_material_04,1144,100.0,2,0.017482517482517484,0.13111791241354662,0.0,1.0,llm_construction,one_hot,llm:features,уровень: газоблок (20 строк)
+llm_wall_material_05,1144,100.0,2,0.013986013986013986,0.11748391590078994,0.0,1.0,llm_construction,one_hot,llm:features,уровень: газоблоки (16 строк)
+llm_wall_material_06,1144,100.0,2,0.009615384615384616,0.0976281748037547,0.0,1.0,llm_construction,one_hot,llm:features,уровень: дерево (11 строк)
+llm_wall_material_07,1144,100.0,2,0.021853146853146852,0.14626786429893476,0.0,1.0,llm_construction,one_hot,llm:features,уровень: каркасный (25 строк)
+llm_wall_material_08,1144,100.0,2,0.10227272727272728,0.30313914771536005,0.0,1.0,llm_construction,one_hot,llm:features,уровень: кирпич (117 строк)
+llm_wall_material_09,1144,100.0,2,0.016608391608391608,0.1278547696968858,0.0,1.0,llm_construction,one_hot,llm:features,уровень: пеноблок (19 строк)
+llm_wall_material_10,1144,100.0,2,0.009615384615384616,0.0976281748037547,0.0,1.0,llm_construction,one_hot,llm:features,уровень: пеноблоки (11 строк)
+llm_wall_material_other,1144,100.0,2,0.3479020979020979,0.4765130757037836,0.0,1.0,llm_construction,one_hot,llm:features,"редкие уровни (259 шт., 398 строк)"
+llm_wall_material_unknown,1144,100.0,2,0.3706293706293706,0.48318456109595775,0.0,1.0,llm_construction,one_hot,llm:features,поле не заполнено
+llm_wall_thickness_mm,143,12.5,30,354.034965034965,147.47357904152076,22.0,1000.0,llm_construction,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_insulation_material_present,1144,100.0,2,0.08916083916083917,0.2851003942921544,0.0,1.0,llm_construction,llm_flag,llm:features,в тексте названо значение этого поля
+llm_insulation_thickness_mm,112,9.79020979020979,10,152.90178571428572,81.57138694391354,5.0,500.0,llm_construction,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_foundation_type_00,1144,100.0,2,0.05332167832167832,0.22477241843600215,0.0,1.0,llm_construction,one_hot,llm:features,уровень: ленточный (61 строк)
+llm_foundation_type_01,1144,100.0,2,0.026223776223776224,0.1598700443180088,0.0,1.0,llm_construction,one_hot,llm:features,уровень: монолитная плита (30 строк)
+llm_foundation_type_02,1144,100.0,2,0.013111888111888112,0.1138037238300521,0.0,1.0,llm_construction,one_hot,llm:features,уровень: свайно-ростверковый (15 строк)
+llm_foundation_type_other,1144,100.0,2,0.2298951048951049,0.4209492121457329,0.0,1.0,llm_construction,one_hot,llm:features,"редкие уровни (183 шт., 263 строк)"
+llm_foundation_type_unknown,1144,100.0,2,0.6774475524475524,0.4676575034722893,0.0,1.0,llm_construction,one_hot,llm:features,поле не заполнено
+llm_floor_structure_present,1144,100.0,2,0.1590909090909091,0.3659208049193686,0.0,1.0,llm_construction,llm_flag,llm:features,в тексте названо значение этого поля
+llm_roof_covering_00,1144,100.0,2,0.10227272727272728,0.30313914771536,0.0,1.0,llm_construction,one_hot,llm:features,уровень: металлочерепица (117 строк)
+llm_roof_covering_01,1144,100.0,2,0.008741258741258742,0.09312588218251922,0.0,1.0,llm_construction,one_hot,llm:features,уровень: мягкая (10 строк)
+llm_roof_covering_02,1144,100.0,2,0.01486013986013986,0.12104595781806347,0.0,1.0,llm_construction,one_hot,llm:features,уровень: мягкая кровля (17 строк)
+llm_roof_covering_03,1144,100.0,2,0.026223776223776224,0.1598700443180088,0.0,1.0,llm_construction,one_hot,llm:features,уровень: мягкая черепица (30 строк)
+llm_roof_covering_other,1144,100.0,2,0.1258741258741259,0.3318525190172027,0.0,1.0,llm_construction,one_hot,llm:features,"редкие уровни (100 шт., 144 строк)"
+llm_roof_covering_unknown,1144,100.0,2,0.722027972027972,0.44819546329711796,0.0,1.0,llm_construction,one_hot,llm:features,поле не заполнено
+llm_electricity_connected,579,50.61188811188811,2,0.9965457685664939,0.05872184648455243,0.0,1.0,llm_utilities,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_electricity_power_kw,420,36.71328671328671,19,14.964761904761904,4.608288288026476,5.0,50.0,llm_utilities,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_electricity_phases,83,7.255244755244755,3,2.963855421686747,0.24424014234945282,1.0,3.0,llm_utilities,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_gas_status_connected,1144,100.0,2,0.2517482517482518,0.4342071781710243,0.0,1.0,llm_utilities,llm_enum,llm:features,допустимое значение поля: connected
+llm_gas_status_at_boundary,1144,100.0,2,0.16695804195804195,0.3731015098410639,0.0,1.0,llm_utilities,llm_enum,llm:features,допустимое значение поля: at_boundary
+llm_gas_status_nearby,1144,100.0,2,0.024475524475524476,0.15458771775286564,0.0,1.0,llm_utilities,llm_enum,llm:features,допустимое значение поля: nearby
+llm_gas_status_absent,1144,100.0,2,0.012237762237762238,0.10999352294885856,0.0,1.0,llm_utilities,llm_enum,llm:features,допустимое значение поля: absent
+llm_water_source_00,1144,100.0,2,0.013986013986013986,0.11748391590078995,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: водопровод (16 строк)
+llm_water_source_01,1144,100.0,2,0.09265734265734266,0.2900784605574353,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: колодец (106 строк)
+llm_water_source_02,1144,100.0,2,0.009615384615384616,0.09762817480375471,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: летний водопровод (11 строк)
+llm_water_source_03,1144,100.0,2,0.1381118881118881,0.3451682761004814,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: скважина (158 строк)
+llm_water_source_04,1144,100.0,2,0.01048951048951049,0.10192429332432935,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: собственная скважина (12 строк)
+llm_water_source_05,1144,100.0,2,0.01048951048951049,0.10192429332432935,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: центральная (12 строк)
+llm_water_source_06,1144,100.0,2,0.057692307692307696,0.23326265838598034,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: центральное водоснабжение (66 строк)
+llm_water_source_07,1144,100.0,2,0.008741258741258742,0.09312588218251922,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: центральный (10 строк)
+llm_water_source_08,1144,100.0,2,0.018356643356643356,0.13429609915422216,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: центральный водопровод (21 строк)
+llm_water_source_other,1144,100.0,2,0.23164335664335664,0.42206685385692283,0.0,1.0,llm_utilities,one_hot,llm:features,"редкие уровни (199 шт., 265 строк)"
+llm_water_source_unknown,1144,100.0,2,0.40821678321678323,0.4917186121745313,0.0,1.0,llm_utilities,one_hot,llm:features,поле не заполнено
+llm_water_connected,502,43.88111888111888,2,0.9800796812749004,0.1398658953716801,0.0,1.0,llm_utilities,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_sewage_type_00,1144,100.0,2,0.018356643356643356,0.13429609915422216,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: канализация (21 строк)
+llm_sewage_type_01,1144,100.0,2,0.18356643356643357,0.3872995193870671,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: септик (210 строк)
+llm_sewage_type_02,1144,100.0,2,0.012237762237762238,0.10999352294885856,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: централизованная (14 строк)
+llm_sewage_type_03,1144,100.0,2,0.011363636363636364,0.10603929976535491,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: центральная (13 строк)
+llm_sewage_type_04,1144,100.0,2,0.06993006993006994,0.2551406631843381,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: центральная канализация (80 строк)
+llm_sewage_type_other,1144,100.0,2,0.1853146853146853,0.38872257166186136,0.0,1.0,llm_utilities,one_hot,llm:features,"редкие уровни (158 шт., 212 строк)"
+llm_sewage_type_unknown,1144,100.0,2,0.5192307692307693,0.49984855368424363,0.0,1.0,llm_utilities,one_hot,llm:features,поле не заполнено
+llm_sewage_connected,437,38.1993006993007,2,0.9702517162471396,0.17008681209773638,0.0,1.0,llm_utilities,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_heating_type_00,1144,100.0,2,0.01486013986013986,0.12104595781806349,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: газовое отопление (17 строк)
+llm_heating_type_01,1144,100.0,2,0.01486013986013986,0.12104595781806347,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: газовый котел (17 строк)
+llm_heating_type_02,1144,100.0,2,0.01048951048951049,0.10192429332432935,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: печное (12 строк)
+llm_heating_type_03,1144,100.0,2,0.01486013986013986,0.12104595781806349,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: печь (17 строк)
+llm_heating_type_04,1144,100.0,2,0.02097902097902098,0.14337667505759694,0.0,1.0,llm_utilities,one_hot,llm:features,уровень: электрическое (24 строк)
+llm_heating_type_other,1144,100.0,2,0.354020979020979,0.478424711196971,0.0,1.0,llm_utilities,one_hot,llm:features,"редкие уровни (303 шт., 405 строк)"
+llm_heating_type_unknown,1144,100.0,2,0.5699300699300699,0.49530215987435194,0.0,1.0,llm_utilities,one_hot,llm:features,поле не заполнено
+llm_heating_operational,63,5.5069930069930075,2,0.9206349206349206,0.27247890131917835,0.0,1.0,llm_utilities,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_hot_water_system_present,1144,100.0,2,0.10839160839160839,0.31101032066808526,0.0,1.0,llm_utilities,llm_flag,llm:features,в тексте названо значение этого поля
+llm_ventilation_type_present,1144,100.0,2,0.03496503496503497,0.183771603562518,0.0,1.0,llm_utilities,llm_flag,llm:features,в тексте названо значение этого поля
+llm_land_area_sotka,1106,96.67832167832168,295,11.787052441229656,39.90171085356605,1.0,700.0,llm_land,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_land_category_00,1144,100.0,2,0.07255244755244755,0.25951389185166085,0.0,1.0,llm_land,one_hot,llm:features,уровень: земли населенных пунктов (83 строк)
+llm_land_category_01,1144,100.0,2,0.024475524475524476,0.15458771775286564,0.0,1.0,llm_land,one_hot,llm:features,уровень: земли населённых пунктов (28 строк)
+llm_land_category_other,1144,100.0,2,0.03409090909090909,0.1815420833753656,0.0,1.0,llm_land,one_hot,llm:features,"редкие уровни (18 шт., 39 строк)"
+llm_land_category_unknown,1144,100.0,2,0.8688811188811189,0.33767794354081315,0.0,1.0,llm_land,one_hot,llm:features,поле не заполнено
+llm_permitted_use_00,1144,100.0,2,0.012237762237762238,0.10999352294885856,0.0,1.0,llm_land,one_hot,llm:features,уровень: для ведения садоводства (14 строк)
+llm_permitted_use_01,1144,100.0,2,0.016608391608391608,0.1278547696968858,0.0,1.0,llm_land,one_hot,llm:features,уровень: для садоводства (19 строк)
+llm_permitted_use_02,1144,100.0,2,0.5708041958041958,0.49517784934765313,0.0,1.0,llm_land,one_hot,llm:features,уровень: ижс (653 строк)
+llm_permitted_use_other,1144,100.0,2,0.050699300699300696,0.21947890357815944,0.0,1.0,llm_land,one_hot,llm:features,"редкие уровни (27 шт., 58 строк)"
+llm_permitted_use_unknown,1144,100.0,2,0.34965034965034963,0.47706805424523024,0.0,1.0,llm_land,one_hot,llm:features,поле не заполнено
+llm_terrain_present,1144,100.0,2,0.2666083916083916,0.44237927512670366,0.0,1.0,llm_land,llm_flag,llm:features,в тексте названо значение этого поля
+llm_drainage_present,1144,100.0,2,0.10839160839160839,0.31101032066808526,0.0,1.0,llm_land,llm_flag,llm:features,в тексте названо значение этого поля
+llm_fencing_present,1144,100.0,2,0.3120629370629371,0.4635380044826584,0.0,1.0,llm_land,llm_flag,llm:features,в тексте названо значение этого поля
+llm_parking_present,1144,100.0,2,0.3103146853146853,0.46282472387880996,0.0,1.0,llm_land,llm_flag,llm:features,в тексте названо значение этого поля
+llm_house_registration_claimed,266,23.251748251748253,2,0.9323308270676691,0.2516508129330788,0.0,1.0,llm_documents,llm_flag,llm:features,булево значение из текста; NaN — не упомянуто
+llm_heating_cost_rub_per_month,5,0.4370629370629371,4,5600.0,2329.1629397704232,1500.0,7000.0,llm_costs,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_settlement_fee_rub_per_month,30,2.6223776223776225,23,4173.716666666666,3586.048405550882,0.0,13000.0,llm_costs,llm_numeric,llm:features,значение извлечено языковой моделью из текста объявления
+llm_seller_type_00,1144,100.0,2,0.020104895104895104,0.14042052643927558,0.0,1.0,llm_costs,one_hot,llm:features,уровень: агентство недвижимости (23 строк)
+llm_seller_type_01,1144,100.0,2,0.019230769230769232,0.13739522557682374,0.0,1.0,llm_costs,one_hot,llm:features,уровень: застройщик (22 строк)
+llm_seller_type_02,1144,100.0,2,0.12325174825174826,0.32886972519133184,0.0,1.0,llm_costs,one_hot,llm:features,уровень: собственник (141 строк)
+llm_seller_type_other,1144,100.0,2,0.03496503496503497,0.18377160356251804,0.0,1.0,llm_costs,one_hot,llm:features,"редкие уровни (24 шт., 40 строк)"
+llm_seller_type_unknown,1144,100.0,2,0.8024475524475524,0.3983267132332379,0.0,1.0,llm_costs,one_hot,llm:features,поле не заполнено
+llm_status_stated_count,1144,100.0,32,17.024475524475523,6.023816444255344,4.0,37.0,llm_meta,llm_count,llm:features,сколько полей получили этот статус
+llm_status_planned_count,1144,100.0,2,0.030594405594405596,0.17229142691004098,0.0,1.0,llm_meta,llm_count,llm:features,сколько полей получили этот статус
+llm_status_possible_count,1144,100.0,4,0.027097902097902096,0.1827178047730209,0.0,3.0,llm_meta,llm_count,llm:features,сколько полей получили этот статус
+llm_status_unknown_count,1144,100.0,32,32.91783216783217,6.040420586407589,13.0,46.0,llm_meta,llm_count,llm:features,сколько полей получили этот статус
+llm_additional_buildings_count,1144,100.0,8,1.0655594405594406,1.4092815199288553,0.0,7.0,llm_meta,llm_count,llm:additional_buildings,сколько элементов перечислено: дополнительные строения
+llm_included_items_count,1144,100.0,10,0.46503496503496505,1.268296160950682,0.0,24.0,llm_meta,llm_count,llm:included_items,сколько элементов перечислено: включённое в продажу имущество
+llm_reported_problems_count,1144,100.0,5,0.05244755244755245,0.29997542455938964,0.0,4.0,llm_meta,llm_count,llm:reported_problems,сколько элементов перечислено: сообщённые проблемы
+llm_conflicts_count,1144,100.0,6,0.4160839160839161,0.6770478193837807,0.0,5.0,llm_meta,llm_count,llm:conflicts,сколько элементов перечислено: противоречия
+llm_ambiguities_count,1144,100.0,8,2.0882867132867133,1.1067608353975762,0.0,7.0,llm_meta,llm_count,llm:ambiguities,сколько элементов перечислено: неоднозначности
+llm_evidence_count,1144,100.0,32,17.082167832167833,6.040420586407589,4.0,37.0,llm_meta,llm_count,llm:features,сколько полей подкреплены цитатой
