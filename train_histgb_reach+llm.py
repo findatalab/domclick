@@ -57,6 +57,8 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import GroupKFold, KFold, ParameterSampler
 
+import mlflow_utils  # локальный модуль: опциональный трекинг запусков (см. README)
+
 
 LOG = logging.getLogger("domclick.ensemble.llm")
 IDENTIFIER_COLUMN = "listing_id"
@@ -906,6 +908,16 @@ def run(args: argparse.Namespace) -> None:
     ]
     (output_dir / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
 
+    mlflow_utils.log_training_run(
+        args, model_name="histgb-reach-llm", input_path=input_path, output_dir=output_dir,
+        extra_params={"rows": len(x), "features": len(feature_columns),
+                      "llm_features": len(llm_columns),
+                      "llm_input": str(llm_path) if llm_path else ""},
+        extra_metrics={"baseline_rmse_rub": float(baseline_rmse),
+                       "improvement_pct": float(improvement)},
+        metrics=metrics, summary=summary,
+    )
+
     print(f"Rows: {len(x):,}; structured features: {len(structured_columns)}; "
           f"LLM features: {len(llm_columns)}; folds: {args.folds}".replace(",", " "))
     for model in MODEL_NAMES:
@@ -963,6 +975,7 @@ def parse_args() -> argparse.Namespace:
                         help="Отключить обрезку прогнозов по диапазону обучающей части фолда.")
     parser.add_argument("--verbose", action="store_true",
                         help="Показывать предупреждения и подробные сообщения.")
+    mlflow_utils.add_mlflow_args(parser)
     args = parser.parse_args()
     if not 0.0 <= args.blend_weight <= 1.0:
         parser.error("--blend-weight должен быть в диапазоне 0..1.")
