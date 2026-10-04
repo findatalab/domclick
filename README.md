@@ -265,6 +265,48 @@ matrix = structured.merge(llm, on="listing_id", how="left")
 
 Векторы — это представление текста, а не предсказание модели, поэтому утечки цели в них нет.
 
+### 3.3. Компактная матрица: числовой каркас и 10 групп признаков → `data/features/features_v1.csv`, `reports/features_v1/`
+
+```bash
+python build_features_v1.py
+```
+
+Сжатый набор для быстрых экспериментов: **числовой каркас** из карточки объявления
+(`house_area_m2`, `distance_to_mkad_km`, `highway`, `land_area_sotka`, `floors`,
+`house_area_per_floor`, `land_to_house_ratio`) и **10 групп признаков**: девять из них
+собираются из извлечений текста, группа «Земля» — из меток карточки и извлечений.
+
+| Группа | Уровни |
+| --- | --- |
+| Земля | ИЖС / СНТ / ДНП / ЛПХ / земли населённых пунктов / сельхозназначение / другие |
+| Отделка | без отделки / предчистовая / готовая / частичная / неизвестно |
+| Газ | подключён / по границе / рядом / отсутствует / неизвестно |
+| Стены | газобетон / пенобетон / кирпич / каркас / брус / бревно / другие / неизвестно |
+| Фундамент | плита / ленточный / сваи / свайно-ростверковый / другой / неизвестно |
+| Отопление | газовое / электрическое / печное / твёрдотопливное / другое / неизвестно + работоспособность |
+| Вода и канализация | скважина / колодец / центральное / привозная вода / другое + тип канализации и подключение |
+| Планировка | спальни, санузлы, мансарда, подвал |
+| Дополнительные строения | баня, гараж, гостевой дом: наличие и наибольшая площадь |
+| Возраст | год постройки и год реконструкции |
+
+Карточка приоритетна: извлечения только заполняют пропуски каркаса. У группы «Земля»
+источники идут по порядку: метки карточки `land_use_label`, затем вид разрешённого
+использования, затем категория земель из извлечений. Свободный текст
+схлопывается в канонический уровень («газобетонные блоки», «газоблок», «газобетон» →
+`gazobeton`), нераспознанное попадает в `other`, отсутствующее — в `unknown`; колонки
+словаря выводятся всегда, поэтому схема матрицы не зависит от выборки.
+
+Значения используются, только если статус входит в `--llm-statuses` (по умолчанию
+`stated`): промпт (`prompts/prompt_v1.txt`) различает существующее, запланированное и
+возможное, а газ по границе — не подключённый газ. `--one-hot-min-count` управляет только
+частотами шоссе, `--no-llm-fill` оставляет один каркас. Пропуски остаются NaN, признаки,
+производные от цены, не строятся.
+
+Матрица содержит `listing_id`, признаки, цель `asking_price_rub`, вариант цели
+`log_asking_price_rub` и ключ групп `group_locality`. Отчёт
+`reports/features_v1/report.md` показывает колонки и покрытие по группам, канонические
+уровни, расхождения карточки и извлечений и раскладку по статусам.
+
 ### 4. Базовая модель: линейная регрессия → `reports/lin_reg_2f/`
 
 ```bash
@@ -293,6 +335,29 @@ python train_histgb.py
 моделью предсказания среднего, permutation importance, посчитанную на тестовых фолдах,
 и диагностику остатков.
 
+### 6. kNN-регрессия → `reports/knn_v1/`
+
+```bash
+python train_knn.py
+```
+
+`KNeighborsRegressor` на компактной матрице (п. 3.3): прогноз — взвешенное по расстоянию
+среднее цен `k` ближайших объявлений. kNN не умеет работать с NaN и чувствителен к
+масштабу, поэтому в `Pipeline` перед моделью стоят `SimpleImputer(median)` и
+масштабирование (`--scaler standard|robust|none`); и то и другое обучается **только на
+обучающей части фолда**, поэтому тест в заполнение пропусков и в масштаб не попадает.
+Обрезка прогнозов не нужна: на лог-шкале прогноз — выпуклая комбинация целей соседей и
+не выходит за диапазон обучающей части фолда.
+
+Полезные ключи: `--cv {group,kfold}`, `--folds`, `--seed`, `--n-neighbors`, `--weights
+{uniform,distance}`, `--p {1,2}`, `--scaler`, `--tune N` (случайный поиск `n_neighbors`,
+`weights`, `p` на внутренней разбивке обучающей части фолда), `--inner-folds`,
+`--importance-repeats`.
+
+Отчёт содержит метрики на лог-шкале и в рублях, разбивку по фолдам, сравнение с базовой
+моделью, permutation importance и диагностику остатков. Пример запуска на своей матрице:
+`python train_knn.py --input data/features/features_rich.csv --output-dir reports/knn`.
+
 ## Где смотреть результаты
 
 | Этап | Отчёт | Ключевые файлы |
@@ -300,10 +365,12 @@ python train_histgb.py
 | EDA | `reports/eda/report.md` | `price_distribution.csv`, `numeric_summary.csv`, `outliers_iqr.csv`, `spearman_correlations.csv`, `figures/` |
 | Базовые признаки | `reports/features/report.md` | `feature_summary.csv`, `feature_correlations.csv` |
 | Широкие признаки | `reports/features_rich/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
+| Компактные признаки (каркас + 10 групп) | `reports/features_v1/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
 | Признаки из текста (DeepSeek) | `reports/features_llm/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `llm_field_summary.csv` |
 | Эмбеддинги описаний | `data/features/embeddings_meta.json` | `embeddings.csv`, `embeddings.npy`, `embeddings_cache.jsonl` |
 | Линейная модель | `reports/lin_reg_2f/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `coefficients.csv`, `predictions.csv` |
 | Бустинг | `reports/histgb/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `feature_importance.csv`, `predictions.csv`, `figures/` |
+| kNN | `reports/knn_v1/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `feature_importance.csv`, `predictions.csv`, `tuning.csv`, `figures/` |
 
 ## Условия воспроизводимости
 
