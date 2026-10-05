@@ -33,8 +33,10 @@ Design rules
    category (its card tags); the extraction fills their gaps. The groups themselves are
    built only from the extractions.
 2. Every answer is cached per listing together with the hash of the advertisement text,
-   the hash of both prompts and the model name, so a run is resumable: a long pass over
-   a local model can be stopped and restarted without repeating finished listings.
+   the hash of both prompts, the schema hash and the model name, and the record is
+   flushed + fsynced to disk before the next request: a power loss cannot lose finished
+   listings, and a run can always be continued with the same command. The tail line of a
+   cache cut short mid-write is repaired on the next start.
 3. Free-text and enum answers are collapsed into the canonical vocabulary of their group
    ("газоблок", "газосиликат", "gazobeton" -> `gazobeton`); the vocabulary columns are
    always emitted, so the matrix schema does not depend on the sample.
@@ -57,11 +59,12 @@ import argparse
 import hashlib
 import json
 import logging
+import os
 import re
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -376,6 +379,11 @@ PROMPT_VERSION = "2.0"
 DEFAULT_MODEL = "qwen3.8"
 DEFAULT_HOST = "http://127.0.0.1:11434"
 
+# Measured pace of a local model on this dataset (two prompts per listing): the estimate in
+# the run header is only a hint, the real speed is printed with every progress line.
+SECONDS_PER_LISTING = 20.0
+SECONDS_PER_LISTING_THINK = 60.0
+
 # Card fields rendered into the advertisement block. The price and the platform badges are
 # deliberately absent: the extractions become features, so feeding the target (or a badge
 # computed from it) to the model would leak the price into the matrix.
@@ -594,6 +602,115 @@ def canonical_highway(values: pd.Series) -> pd.Series:
 def counted(value: int) -> str:
     """Group thousands with a space, the way the other reports do."""
     return f"{value:,}".replace(",", " ")
+
+
+def human_duration(seconds: float) -> str:
+    """Duration in words for the console: "45 с", "12 мин", "2 ч 05 мин"."""
+    seconds = max(float(seconds), 0.0)
+    if seconds < 90:
+        return f"{seconds:.0f} с"
+    minutes = seconds / 60.0
+    if minutes < 90:
+        return f"{minutes:.0f} мин"
+    hours, rest = divmod(int(round(minutes)), 60)
+    return f"{hours} ч {rest:02d} мин"
+
+
+def finish_clock(seconds: float) -> str:
+    """Wall clock time at which the remaining work is expected to be over."""
+    return (datetime.now() + timedelta(seconds=max(float(seconds), 0.0))).strftime("%H:%M")
+
+
+def cache_size_bytes(path: Path) -> float:
+    """Size of the answer cache on disk, in bytes."""
+    try:
+        return float(path.stat().st_size)
+    except OSError:
+        return 0.0
+
+
+def size_text(num_bytes: float) -> str:
+    """Human-readable size for the console: "420 Б", "3 КБ", "1.4 МБ"."""
+    if num_bytes < 1024:
+        return f"{num_bytes:.0f} Б"
+    if num_bytes < 1024 * 1024:
+        return f"{num_bytes / 1024:.0f} КБ"
+    return f"{num_bytes / 1024 / 1024:.1f} МБ"
+
+
+def plural(count: int, one: str, few: str, many: str) -> str:
+    """Russian plural form: plural(2, "строка", "строки", "строк") -> "строки"."""
+    tail = abs(int(count)) % 100
+    if 11 <= tail <= 14:
+        return many
+    last = tail % 10
+    if last == 1:
+        return one
+    if last in (2, 3, 4):
+        return few
+    return many
+
+
+def cache_count_text(path: Path) -> str:
+    """Records on disk with the right plural and size: "24 записи (11 КБ)"."""
+    lines = cache_line_count(path)
+    return f"{counted(lines)} {plural(lines, 'запись', 'записи', 'записей')} " \
+           f"({size_text(cache_size_bytes(path))})"
+
+
+def cache_line_count(path: Path) -> int:
+    """Non-empty lines of the cache: every line is one saved answer."""
+    if not path.is_file():
+        return 0
+    try:
+        with path.open("r", encoding="utf-8-sig") as stream:
+            return sum(1 for line in stream if line.strip())
+    except OSError:
+        return 0
+
+
+def ensure_trailing_newline(path: Path) -> bool:
+    """Repair a tail line that a power loss left without a newline.
+
+    A record is written as a single line, but a crash can still cut the last line short;
+    appending straight away would merge it with the next record and lose both. Returns
+    True when the file had to be repaired.
+    """
+    try:
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+        with path.open("rb") as stream:
+            stream.seek(-1, os.SEEK_END)
+            if stream.read(1) == b"\n":
+                return False
+    except OSError as exc:
+        LOG.warning("Не удалось проверить конец кэша %s: %s", path, exc)
+        return False
+    try:
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError as exc:
+        LOG.warning("Не удалось дописать перевод строки в кэш %s: %s", path, exc)
+        return False
+    return True
+
+
+def say(message: str = "") -> None:
+    """Console line for a long run: flushed right away, so it survives an interruption."""
+    print(console_safe(message), flush=True)
+
+
+def progress_message(*, done: int, total: int, elapsed: float, failures: int,
+                     cache_path: Path) -> str:
+    """One console line about the pass: pace, elapsed time, ETA and cache state."""
+    pace = done / elapsed if elapsed > 0 else 0.0
+    left = (total - done) / pace if pace > 0 else 0.0
+    return (f"Прогресс: {counted(done)}/{counted(total)} ({done / total * 100:.1f}%); "
+            f"скорость {pace * 60:.1f} объявл./мин; прошло {human_duration(elapsed)}; "
+            f"осталось ~{human_duration(left)} (к {finish_clock(left)}); "
+            f"ошибок {counted(failures)}; кэш {size_text(cache_size_bytes(cache_path))}")
 
 
 def console_safe(value: str) -> str:
@@ -857,16 +974,23 @@ def load_cache(path: Path, *, model: str, prompts: str,
     except OSError as exc:
         raise SystemExit(f"Не удалось прочитать кэш извлечений {path}: {exc}") from exc
     if invalid:
-        LOG.warning("В кэше %s пропущено %s повреждённых строк", path, invalid)
+        LOG.warning("В кэше %s пропущено %s %s", path, invalid,
+                    plural(invalid, "повреждённая строка", "повреждённые строки",
+                           "повреждённых строк"))
     return records
 
 
 def append_cache(path: Path, record: dict[str, Any]) -> None:
-    """Append one answer to the cache so an interrupted run keeps its progress."""
+    """Append one answer to the cache and push it to disk before returning.
+
+    The record is one line, flushed and fsynced right away: a power loss cannot lose
+    finished listings, and the next run reads them back instead of asking the model again.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(record, ensure_ascii=False) + "\n")
         stream.flush()
+        os.fsync(stream.fileno())
 
 
 def collect_extractions(raw: pd.DataFrame, cache_path: Path, options: argparse.Namespace,
@@ -881,7 +1005,8 @@ def collect_extractions(raw: pd.DataFrame, cache_path: Path, options: argparse.N
     }
 
     if not options.llm_fill:
-        LOG.warning("Извлечения отключены (--no-llm): заполнятся только поля карточки")
+        say("Извлечения отключены (--no-llm): матрица соберётся только из полей карточки, "
+            "колонки групп останутся пустыми.")
         return {}, stats
 
     prompt_cat = load_prompt(options.prompt_cat)
@@ -889,10 +1014,20 @@ def collect_extractions(raw: pd.DataFrame, cache_path: Path, options: argparse.N
     digest = prompt_hash(prompt_cat, prompt_num)
     stats["prompt_sha256"] = digest
 
+    repaired = ensure_trailing_newline(cache_path)
     cached = {} if options.refresh else load_cache(cache_path, model=options.model,
                                                    prompts=digest, schema=SCHEMA_SHA256)
     records: dict[str, dict[str, Any]] = dict(cached)
     stats["from_cache"] = len(cached)
+
+    say(f"Кэш: {cache_path}")
+    say(f"      на диске {cache_count_text(cache_path)}; актуальных ответов для этой "
+        f"выборки: {counted(len(cached))}")
+    if repaired:
+        say("      последняя строка кэша была без перевода строки (прошлый запуск прерван "
+            "на записи) — файл починен.")
+    if options.refresh:
+        say("      --refresh: кэш игнорируется, все объявления запрашиваются заново.")
 
     pending = [
         (listing_id, advertisement, text_hash(advertisement))
@@ -901,8 +1036,11 @@ def collect_extractions(raw: pd.DataFrame, cache_path: Path, options: argparse.N
                 and cached[listing_id].get("text_sha256") == text_hash(advertisement))
     ]
     if not pending:
-        LOG.info("Все объявления уже есть в кэше %s", cache_path)
+        say(f"Актуальные ответы есть по всем {counted(len(ids))} "
+            f"{plural(len(ids), 'объявлению', 'объявлениям', 'объявлениям')}: запросов к "
+            f"модели не требуется, сразу собираю матрицу.")
         stats["records"] = records
+        stats["missing"] = 0
         return records, stats
 
     extractor = OllamaExtractor(
@@ -910,11 +1048,28 @@ def collect_extractions(raw: pd.DataFrame, cache_path: Path, options: argparse.N
         think=options.think, num_ctx=options.num_ctx, retries=options.retries,
     )
     ensure_model(extractor.client(), options.model)
-    pace = "одна модель, один поток" if options.parallel == 1 \
-        else f"{options.parallel} объявлений параллельно"
-    LOG.info("Осталось запросить %s объявлений (по 2 запроса на объявление), %s; "
-             "прогноз времени появится после первых объявлений",
-             len(pending), pace)
+    per_listing = SECONDS_PER_LISTING_THINK if options.think else SECONDS_PER_LISTING
+    estimate = len(pending) * per_listing / max(options.parallel, 1)
+
+    say(f"Модель: {options.model} на {options.host}; рассуждения: "
+        f"{'включены' if options.think else 'выключены'}; параллельно: "
+        f"{max(options.parallel, 1)} объявл.")
+    say(f"Промпты: {options.prompt_cat.name} + {options.prompt_num.name} "
+        f"(sha {digest}); версия промпта {PROMPT_VERSION}, схема ответа {SCHEMA_SHA256}")
+    say(f"Объявлений в выборке: {counted(len(ids))}; берётся из кэша: {counted(len(cached))}; "
+        f"нужно запросить: {counted(len(pending))} "
+        f"{plural(len(pending), 'объявление', 'объявления', 'объявлений')} "
+        f"(по 2 запроса на объявление)")
+    say(f"Оценка времени: ~{human_duration(estimate)} (до "
+        f"{finish_clock(estimate)}). Каждый готовый ответ сразу пишется на диск, поэтому "
+        f"при отключении питания прогон продолжается с этого места.")
+    if options.log_every:
+        if options.log_every == 1:
+            say("Прогресс: строка после каждого объявления (--log-every 0 отключает их).")
+        else:
+            say(f"Прогресс: строка каждые {options.log_every} объявлений "
+                f"(--log-every 0 отключает их).")
+    say("")
 
     started = time.perf_counter()
     failures: dict[str, str] = {}
@@ -938,39 +1093,69 @@ def collect_extractions(raw: pd.DataFrame, cache_path: Path, options: argparse.N
                                 "; ".join(f"{key}: {value}"
                                           for key, value in answer["errors"].items()))
         done = stats["requested"]
-        if done % options.log_every == 0 or done == len(pending):
-            elapsed = time.perf_counter() - started
-            left = (len(pending) - done) * (elapsed / done) if done else 0.0
-            LOG.info("Готово %s/%s объявлений, %.1f %%; ошибок: %s; осталось ~%.1f мин",
-                     done, len(pending), done / len(pending) * 100, len(failures), left / 60.0)
+        if options.verbose:
+            filled = sum(1 for value in (answer.get("extraction") or {}).values()
+                         if value is not None)
+            say(f"  [{counted(done)}/{counted(len(pending))}] {listing_id}: "
+                f"{answer.get('elapsed_s', 0.0):.1f} с, заполненных полей {filled}"
+                + (f", ошибка: {failures[listing_id]}" if listing_id in failures else ""))
+        # Первая строка — сразу после первого объявления: по ней видно реальную скорость,
+        # дальше прогресс пишется каждые `--log-every` объявлений.
+        if options.log_every and (done == 1 or done % options.log_every == 0
+                                  or done == len(pending)):
+            say(progress_message(done=done, total=len(pending),
+                                 elapsed=time.perf_counter() - started,
+                                 failures=len(failures), cache_path=cache_path))
 
-    if options.parallel > 1:
-        with ThreadPoolExecutor(max_workers=options.parallel) as pool:
-            futures: dict[Future[dict[str, Any]], tuple[str, str]] = {
-                pool.submit(extractor.extract, advertisement): (listing_id, hashed)
-                for listing_id, advertisement, hashed in pending
-            }
-            try:
-                for future in as_completed(futures):
-                    listing_id, hashed = futures[future]
-                    handle(listing_id, hashed, future.result())
-            except KeyboardInterrupt:
-                for future in futures:
-                    future.cancel()
-                raise
-    else:
-        for listing_id, advertisement, hashed in pending:
-            handle(listing_id, hashed, extractor.extract(advertisement))
+    try:
+        if options.parallel > 1:
+            with ThreadPoolExecutor(max_workers=options.parallel) as pool:
+                futures: dict[Future[dict[str, Any]], tuple[str, str]] = {
+                    pool.submit(extractor.extract, advertisement): (listing_id, hashed)
+                    for listing_id, advertisement, hashed in pending
+                }
+                try:
+                    for future in as_completed(futures):
+                        listing_id, hashed = futures[future]
+                        handle(listing_id, hashed, future.result())
+                except KeyboardInterrupt:
+                    for future in futures:
+                        future.cancel()
+                    raise
+        else:
+            for listing_id, advertisement, hashed in pending:
+                handle(listing_id, hashed, extractor.extract(advertisement))
+    except KeyboardInterrupt:
+        say("")
+        say(f"Прервано. Прогресс уже на диске: {cache_count_text(cache_path)} в "
+            f"{cache_path}.")
+        say("Продолжить с этого места: запустите ту же команду (без --refresh).")
+        raise
 
     stats["seconds"] = time.perf_counter() - started
     stats["failed"] = len(failures)
     stats["failures"] = failures
     stats["records"] = records
+    stats["missing"] = sum(1 for listing_id in ids if listing_id not in records)
+    say("")
+    say(f"Запросов сделано: {counted(stats['requested'])} "
+        f"{plural(stats['requested'], 'запрос', 'запроса', 'запросов')} за "
+        f"{human_duration(stats['seconds'])} "
+        f"({stats['requested'] / max(stats['seconds'], 1) * 60:.1f} объявл./мин); "
+        f"ошибок ответа: {counted(stats['failed'])}")
+    say(f"В кэше теперь {cache_count_text(cache_path)}")
     if failures:
-        first = next(iter(failures))
+        sample = ", ".join(list(failures)[:3])
         LOG.warning("Без корректного ответа осталось %s объявлений; пример: %s -> %s",
-                    len(failures), first, failures[first])
-    LOG.info("Кэш извлечений: %s (%s записей)", cache_path, len(records))
+                    len(failures), next(iter(failures)), next(iter(failures.values())))
+        say(f"Без корректного ответа: {counted(len(failures))} "
+            f"{plural(len(failures), 'объявление', 'объявления', 'объявлений')} "
+            f"(например, {sample}); их признаки групп останутся NaN в матрице.")
+    if stats["missing"]:
+        say(f"Без ответа модели осталось {counted(stats['missing'])} "
+            f"{plural(stats['missing'], 'объявление', 'объявления', 'объявлений')}: "
+            f"перезапустите ту же команду, чтобы добрать — готовые ответы не "
+            f"запрашиваются повторно.")
     return records, stats
 
 
@@ -1715,17 +1900,30 @@ def run(input_path: Path, cache_path: Path, features_path: Path, report_dir: Pat
 
     filled_backbone = sum(stats["from_llm"] for name, stats in audit["sources"].items()
                           if name in STRUCTURED_FEATURES)
-    print(console_safe(f"Строк: {counted(len(matrix))}; колонок: {matrix.shape[1]} "
-                       f"(признаков {len(feature_columns)})"))
-    print(console_safe(
-        f"Заполнено из извлечений (каркас): {filled_backbone} значений; "
-        f"ответов модели: {len(cache_stats.get('records') or {})} "
-        f"(из кэша {cache_stats.get('from_cache', 0)}, "
-        f"запрошено {cache_stats.get('requested', 0)}, "
-        f"ошибок {cache_stats.get('failed', 0)})"))
-    print(f"Матрица признаков: {features_path}")
-    print(f"Кэш извлечений: {cache_path}")
-    print(f"Отчёт и словарь: {report_dir}")
+    answered_rows = audit["answered"]
+    say("")
+    say(f"Матрица: строк {counted(len(matrix))}, колонок {matrix.shape[1]} "
+        f"(признаков {counted(len(feature_columns))})")
+    say(f"Заполнено из извлечений (каркас): {counted(filled_backbone)} значений; "
+        f"ответов модели по объявлениям: {counted(answered_rows)} из "
+        f"{counted(len(matrix))}")
+    say("Группы признаков:")
+    groups = group_table(dictionary, audit, len(matrix))
+    for name, columns_count, coverage in zip(groups["группа"], groups["колонок"],
+                                            groups["среднее покрытие, %"]):
+        say(f"  {name:<26} колонок {int(columns_count):>2}, покрытие {coverage} %")
+    say(f"Матрица признаков: {features_path}")
+    say(f"Кэш извлечений: {cache_path}")
+    say(f"Отчёт и словарь: {report_dir}")
+    if options.llm_fill and cache_stats.get("missing"):
+        missing = int(cache_stats["missing"])
+        say(f"Без ответа модели осталось {counted(missing)} "
+            f"{plural(missing, 'объявление', 'объявления', 'объявлений')} — их признаки "
+            f"групп в матрице пустые. Перезапустите ту же команду: готовые ответы "
+            f"читаются из кэша и не запрашиваются повторно.")
+    elif not options.llm_fill:
+        say("Извлечения были отключены (--no-llm): полный прогон — та же команда без этого "
+            "ключа, кэш заполнится заново.")
 
 
 def parse_args() -> argparse.Namespace:
@@ -1790,8 +1988,9 @@ def parse_args() -> argparse.Namespace:
         help="Игнорировать кэш и перезапросить все объявления.",
     )
     parser.add_argument(
-        "--log-every", type=int, default=25,
-        help="Писать прогресс каждые N объявлений (по умолчанию 25).",
+        "--log-every", type=int, default=10,
+        help="Писать строку прогресса каждые N объявлений (по умолчанию 10; "
+             "0 — только итоговая сводка).",
     )
     parser.add_argument(
         "--one-hot-min-count", type=int, default=10,
@@ -1802,7 +2001,7 @@ def parse_args() -> argparse.Namespace:
         help="Не обращаться к Ollama: собрать матрицу только из полей карточки.",
     )
     parser.add_argument("--verbose", action="store_true",
-                        help="Показывать подробные сообщения.")
+                        help="Писать строку по каждому объявлению и подробные сообщения.")
     return parser.parse_args()
 
 
