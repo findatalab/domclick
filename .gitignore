@@ -3,9 +3,3 @@
 /data
 /.venv
 .env
-
-# MLflow: локальное хранилище экспериментов (см. README, «Трекинг экспериментов»)
-mlflow.db
-mlflow.db-*
-mlartifacts/
-mlruns/

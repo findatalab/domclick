@@ -109,6 +109,7 @@ python -m venv .venv
 Все скрипты запускаются из корня репозитория. Скрипты анализа принимают `--input`
 (по умолчанию `data/dataset/objects.jsonl`), каталог отчётов — `--output-dir`
 (в `build_reach_features.py` и `build_reach_llm_features.py` — `--report-dir`)
+и `--verbose`. Обучающие скрипты принимают `--input`, каталог отчётов `--output-dir`
 и `--verbose`. Сборщик датасета принимает
 позиционный путь к выгрузкам и `--output`.
 
@@ -358,69 +359,6 @@ python train_knn.py
 моделью, permutation importance и диагностику остатков. Пример запуска на своей матрице:
 `python train_knn.py --input data/features/features_rich.csv --output-dir reports/knn`.
 
-## Трекинг экспериментов (MLflow)
-
-MLflow подключён опционально ко всем обучающим скриптам и включается ключом `--mlflow`:
-
-```bash
-pip install "mlflow>=3.16"    # строка в requirements.txt закомментирована: это ~60 пакетов
-python train_knn.py --mlflow
-mlflow ui --backend-store-uri sqlite:///mlflow.db
-```
-
-Скрипты обучения работают и без пакета: `--mlflow` тогда просто печатает предупреждение,
-а без ключа MLflow не трогается вообще.
-
-### Что где лежит
-
-| Путь | Что это |
-| --- | --- |
-| `mlflow.db` | SQLite-хранилище запусков (эксперимент `domclick`): параметры, метрики, теги |
-| `mlartifacts/<run_id>/artifacts/report/` | копия отчёта запуска: `report.md`, CV-таблицы, `predictions.csv`, важности, `figures/` |
-| `mlartifacts/models/m-*/artifacts/model.skops` | модель, обученная на всей матрице (там, где скрипт это умеет) |
-| `reports/...` | те же отчёты, что и раньше: человекочитаемый след в git |
-
-`mlflow.db*`, `mlartifacts/` и `mlruns/` добавлены в `.gitignore`: в git остаются `reports/`,
-а индексируемая история запусков живёт локально. Файлы создаются при первом запуске с
-`--mlflow`.
-
-### Что попадает в запуск
-
-* **параметры** — все ключи скрипта (матрица, `--cv`, `--folds`, `--seed`, гиперпараметры)
-  плюс `rows`, `features` и входные файлы LLM/эмбеддингов там, где они есть;
-* **метрики** — значения по фолдам с `step=фолд` и агрегаты `*_mean/std/min/max`; в
-  ансамблевых скриптах имя метрики получает префикс модели (`ensemble_r2_rub_mean`,
-  `llm_mae_rub_std`, `hgb_rmse_rub_mean`, …);
-* **теги** — `model`, `matrix`, `matrix_hash` (хеш матрицы признаков), `git_commit`,
-  `git_dirty`, версии python и scikit-learn;
-* **артефакты** — весь каталог `--output-dir` (отчёт, таблицы, графики);
-* **модель** — рефит на всех строках с гиперпараметрами из CLI; в ансамблевых скриптах
-  (`train_histgb_reach+llm.py`, `train_histgb_reach+embeds.py`) модели не сохраняются,
-  потому что их несколько. Прогноз сохранённой модели — в лог-шкале, рубли = `expm1`.
-
-Ключи `--mlflow-tracking-uri` (по умолчанию `sqlite:///<repo>/mlflow.db`),
-`--mlflow-experiment` (`domclick`), `--mlflow-run-name` (по умолчанию «модель-матрица»,
-например `knn-features_v1`), `--no-mlflow-log-model`. URI и имя эксперимента читаются
-также из окружения или `.env` (`MLFLOW_TRACKING_URI`, `MLFLOW_EXPERIMENT_NAME`) — из того
-же файла, где лежит ключ DeepSeek.
-
-### Сравнение и переиспользование запусков
-
-```python
-import mlflow
-mlflow.set_tracking_uri("sqlite:///mlflow.db")
-runs = mlflow.search_runs(experiment_names=["domclick"],
-                          order_by=["metrics.rmse_rub_mean ASC"])
-print(runs[["tags.mlflow.runName", "params.cv", "params.folds",
-            "metrics.rmse_rub_mean", "metrics.r2_rub_mean"]])
-
-model = mlflow.sklearn.load_model(f'runs:/{runs.iloc[0]["run_id"]}/model')
-```
-
-Так сравниваются, например, kNN и бустинг на одной матрице (`features_v1`) при одинаковом
-`--cv group`: runs отличаются тегом `model`, а параметры `cv`/`folds`/`seed` фиксируют
-условия эксперимента.
-
 ## Где смотреть результаты
 
 | Этап | Отчёт | Ключевые файлы |
@@ -431,12 +369,9 @@ model = mlflow.sklearn.load_model(f'runs:/{runs.iloc[0]["run_id"]}/model')
 | Компактные признаки (каркас + 10 групп) | `reports/features_v1/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
 | Признаки из текста (DeepSeek) | `reports/features_llm/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `llm_field_summary.csv` |
 | Эмбеддинги описаний | `data/features/embeddings_meta.json` | `embeddings.csv`, `embeddings.npy`, `embeddings_cache.jsonl` |
-| Линейная модель | `reports/lin_reg_2f/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `coefficients.csv`, `predictions.csv` |
+| Линейная модель | `reports/lin_reg_2f/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `coefficients.csv`, `predictions.csv`, `figures/` |
 | Бустинг | `reports/histgb/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `feature_importance.csv`, `predictions.csv`, `figures/` |
 | kNN | `reports/knn_v1/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `feature_importance.csv`, `predictions.csv`, `tuning.csv`, `figures/` |
-
-Журнал запусков (параметры, метрики по фолдам, копии отчётов, сохранённые модели) — в
-MLflow, см. раздел «Трекинг экспериментов».
 
 ## Условия воспроизводимости
 

@@ -46,8 +46,6 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import GroupKFold, KFold, ParameterSampler
 
-import mlflow_utils  # локальный модуль: опциональный трекинг запусков (см. README)
-
 
 LOG = logging.getLogger("domclick.histgb")
 IDENTIFIER_COLUMN = "listing_id"
@@ -603,19 +601,6 @@ def run(args: argparse.Namespace) -> None:
     ]
     (output_dir / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
 
-    # Модель на всей матрице нужна только MLflow: метрики выше считаются по фолдам.
-    final_model = None
-    if args.mlflow and args.mlflow_log_model:
-        final_model = make_model({}, args.seed, args.max_iter).fit(
-            x, np.log(y.to_numpy(dtype=float)))
-    mlflow_utils.log_training_run(
-        args, model_name="histgb", input_path=input_path, output_dir=output_dir,
-        extra_params={"rows": len(x), "features": len(feature_columns)},
-        extra_metrics={"baseline_rmse_rub": float(baseline_rmse),
-                       "improvement_pct": float(improvement)},
-        metrics=metrics, summary=summary, model=final_model,
-    )
-
     print(f"Rows: {len(x):,}; features: {len(feature_columns)}; folds: {args.folds}".replace(",", " "))
     print(f"R2 (rub): {summary_by_metric.loc['r2_rub', 'mean']:.3f} "
           f"+- {summary_by_metric.loc['r2_rub', 'std']:.3f}")
@@ -656,7 +641,6 @@ def parse_args() -> argparse.Namespace:
                         help="Отключить обрезку прогнозов по диапазону обучающей части фолда.")
     parser.add_argument("--verbose", action="store_true",
                         help="Показывать предупреждения и подробные сообщения.")
-    mlflow_utils.add_mlflow_args(parser)
     return parser.parse_args()
 
 

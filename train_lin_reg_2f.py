@@ -3,7 +3,7 @@
 
 Model:    LinearRegression on the numeric feature columns of the input table.
 Target:   asking_price_rub (asking price, not a confirmed sale price).
-Default:  5-fold KFold cross-validation, reports written under reports/.
+Default:  5-fold KFold cross-validation, reports written under reports/lin_reg_2f/.
 
 The feature set is derived from the input table (every column except the
 identifier and the target), so adding features in build_features.py is enough.
@@ -33,8 +33,6 @@ from sklearn.metrics import (
     root_mean_squared_error,
 )
 from sklearn.model_selection import KFold
-
-import mlflow_utils  # локальный модуль: опциональный трекинг запусков (см. README)
 
 
 LOG = logging.getLogger("domclick.linreg")
@@ -287,8 +285,7 @@ def markdown_table(frame: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def run(input_path: Path, output_dir: Path, folds: int, seed: int,
-        args: argparse.Namespace) -> None:
+def run(input_path: Path, output_dir: Path, folds: int, seed: int) -> None:
     x, y = load_features(input_path)
     if len(x) < folds:
         raise SystemExit(f"Строк ({len(x)}) меньше числа фолдов ({folds}).")
@@ -417,23 +414,12 @@ def run(input_path: Path, output_dir: Path, folds: int, seed: int,
     ]
     (output_dir / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
 
-    # Модель на всём датасете нужна только MLflow: метрики выше считаются по фолдам.
-    final_model = None
-    if args.mlflow and args.mlflow_log_model:
-        final_model = LinearRegression().fit(x, y)
-    mlflow_utils.log_training_run(
-        args, model_name="lin-reg-2f", input_path=input_path, output_dir=output_dir,
-        extra_params={"rows": len(x), "features": len(x.columns)},
-        extra_metrics={"baseline_rmse_rub": float(baseline["rmse_rub"])},
-        metrics=metrics, summary=summary, model=final_model,
-    )
-
     print(f"Строк: {len(x):,}; признаков: {len(x.columns)}; фолдов: {folds}".replace(",", " "))
     print(f"R² (CV): {summary_by_metric.loc['r2', 'mean']:.3f} "
           f"± {summary_by_metric.loc['r2', 'std']:.3f}")
-    print(f"RMSE (CV): {summary_by_metric.loc['rmse_rub', 'mean']:,.0f} ₽".replace(",", " "))
-    print(f"MAE (CV): {summary_by_metric.loc['mae_rub', 'mean']:,.0f} ₽".replace(",", " "))
-    print(f"Базовая модель RMSE: {baseline['rmse_rub']:,.0f} ₽".replace(",", " "))
+    print(f"RMSE (CV): {summary_by_metric.loc['rmse_rub', 'mean']:,.0f} руб.".replace(",", " "))
+    print(f"MAE (CV): {summary_by_metric.loc['mae_rub', 'mean']:,.0f} руб.".replace(",", " "))
+    print(f"Базовая модель RMSE: {baseline['rmse_rub']:,.0f} руб.".replace(",", " "))
     print(f"Отчёты и графики: {output_dir}")
 
 
@@ -452,7 +438,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--folds", type=int, default=5, help="Число фолдов кросс-валидации (по умолчанию 5).")
     parser.add_argument("--seed", type=int, default=42, help="Случайное зерно перемешивания фолдов.")
     parser.add_argument("--verbose", action="store_true", help="Показывать предупреждения и подробные сообщения.")
-    mlflow_utils.add_mlflow_args(parser)
     return parser.parse_args()
 
 
@@ -462,7 +447,7 @@ def main() -> None:
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s: %(message)s",
     )
-    run(args.input.expanduser(), args.output_dir.expanduser(), args.folds, args.seed, args)
+    run(args.input.expanduser(), args.output_dir.expanduser(), args.folds, args.seed)
 
 
 if __name__ == "__main__":

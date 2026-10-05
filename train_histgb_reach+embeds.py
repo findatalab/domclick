@@ -65,8 +65,6 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-import mlflow_utils  # локальный модуль: опциональный трекинг запусков (см. README)
-
 
 LOG = logging.getLogger("domclick.ensemble")
 IDENTIFIER_COLUMN = "listing_id"
@@ -927,17 +925,6 @@ def run(args: argparse.Namespace) -> None:
     ]
     (output_dir / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
 
-    mlflow_utils.log_training_run(
-        args, model_name="histgb-reach-embeds", input_path=input_path,
-        output_dir=output_dir,
-        extra_params={"rows": len(x), "features": len(feature_columns),
-                      "embedding_features": len(embedding_columns),
-                      "embeddings_input": str(embeddings_path) if embeddings_path else ""},
-        extra_metrics={"baseline_rmse_rub": float(baseline_rmse),
-                       "improvement_pct": float(improvement)},
-        metrics=metrics, summary=summary,
-    )
-
     print(f"Rows: {len(x):,}; structured features: {len(structured_columns)}; "
           f"embeddings: {len(embedding_columns)}; folds: {args.folds}".replace(",", " "))
     for model in MODEL_NAMES:
@@ -970,7 +957,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--blend-weight", type=float, default=0.5,
-        help="Вес структурной модели в ансамбле на лог-шкале (0..1; MLP получает 1−w).",
+        help="Вес структурной модели в ансамбле на лог-шкале (0..1; MLP получает 1-w).",
     )
     parser.add_argument(
         "--output-dir", type=Path, default=default_report_dir(),
@@ -1014,7 +1001,6 @@ def parse_args() -> argparse.Namespace:
                         help="Отключить обрезку прогнозов по диапазону обучающей части фолда.")
     parser.add_argument("--verbose", action="store_true",
                         help="Показывать предупреждения и подробные сообщения.")
-    mlflow_utils.add_mlflow_args(parser)
     args = parser.parse_args()
     if not 0.0 <= args.blend_weight <= 1.0:
         parser.error("--blend-weight должен быть в диапазоне 0..1.")
