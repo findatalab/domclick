@@ -460,9 +460,13 @@ def canonical_levels(values: pd.Series, rules: tuple[tuple[str, str], ...],
     catch-all level.
     """
     cleaned = clean_categorical(values)
+    # pandas 3 хранит текст в pyarrow-колонке, а её векторный regex — это RE2, где \b и
+    # \w понимают только ASCII: шаблон вроде \bижс\b молча не находит кириллицу. Поэтому
+    # сопоставление идёт по object-колонке, где pandas использует модуль re.
+    matcher = cleaned.astype(object)
     levels = pd.Series(pd.NA, index=values.index, dtype="string")
     for level, pattern in rules:
-        matched = cleaned.str.contains(pattern, regex=True, na=False) & levels.isna()
+        matched = matcher.str.contains(pattern, regex=True, na=False) & levels.isna()
         levels = levels.mask(matched, level)
     if other:
         levels = levels.mask(cleaned.notna() & levels.isna(), OTHER_LEVEL)
