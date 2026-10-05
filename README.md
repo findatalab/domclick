@@ -309,6 +309,68 @@ python build_features_v1.py
 `reports/features_v1/report.md` показывает колонки и покрытие по группам, канонические
 уровни, расхождения карточки и извлечений и раскладку по статусам.
 
+### 3.4. Компактная матрица v2: каркас + группы из локальной модели → `data/features/features_v2.csv`, `reports/features_v2/`
+
+```bash
+python build_features_v2.py            # полный проход по 1144 объявлениям
+python build_features_v2.py --limit 20 --verbose   # быстрая проверка на 20 объявлениях
+```
+
+Отличие от `build_features_v1.py`: пропуски каркаса и все группы извлекает локальная
+модель **Ollama** (`qwen3.8` по умолчанию, `--model`, `--host`), а не внешний API, и
+работают два промпта — `prompts/prompt_v2_cat.txt` (категориальные признаки) и
+`prompts/prompt_v2_num.txt` (числа: площади, этажность, расстояние, год постройки,
+планировка, дополнительные строения). Ответы кэшируются в
+`data/features/llm_v2_extractions.jsonl` вместе с хешем текста объявления, хешем обоих
+промптов и именем модели, поэтому прогон можно прерывать и продолжать: уже отвеченные
+объявления не запрашиваются повторно. Правка промпта автоматически инвалидирует кэш,
+`--refresh` перезапрашивает всё заново, `--parallel N` ускоряет проход.
+
+Словари уровней жёстко зафиксированы, поэтому матрица сравнима между прогонами:
+
+| Группа | Уровни |
+| --- | --- |
+| Земля | `izhs` (ИЖС и земли населённых пунктов) / `snt` (СНТ и ДНП) / `lph` / `other` / `unknown` |
+| Отделка | `with_repair` / `without_repair` (включая предчистовую и неизвестное) |
+| Газ | `podklyuchen` / `po_granice` / `otsutstvuet` (включая неизвестное) |
+| Стены | газобетон / пенобетон / кирпич / каркас / брус / бревно / `other` / `unknown` |
+| Фундамент | плита / ленточный / сваи / свайно-ростверковый / `other` / `unknown` |
+| Отопление | `gazovoe` / `gazgolder` / `elektricheskoe` / `pechnoe` / `otsutstvuet` |
+| Вода | `centralnoe` / `skvazhina` / `kolodec` / `otsutstvuet` |
+| Канализация | `centralnoe` / `septik` / `otsutstvuet` |
+| Планировка | `bedrooms`, `bathrooms`, `attic_present`, `basement_present` |
+| Дополнительные строения | `bathhouse_present`, `bathhouse_area_m2`, `garage_*`, `guest_house_*` |
+| Возраст | `house_age` = 2026 − год постройки |
+
+Группы без уровня «other» схлопывают неизвестное в свой отрицательный уровень
+(`otsutstvuet`, `without_repair`) — так задан словарь; строки, по которым модель вообще
+не отвечала, остаются NaN. Значения вне осмысленного диапазона (например, «баня 400 м²»)
+заменяются на NaN и попадают в таблицу проверки диапазонов. Цена и метки платформы в
+промпт не передаются: извлечения становятся признаками, поэтому утечка цели исключена.
+`--no-llm` собирает матрицу только из полей карточки и не требует Ollama.
+
+Матрица использует те же служебные колонки, что и остальные (`listing_id`, цель
+`asking_price_rub`, вариант цели `log_asking_price_rub`, ключ групп `group_locality`),
+поэтому обучающие скрипты принимают её напрямую:
+
+```bash
+python train_histgb.py --input data/features/features_v2.csv
+```
+
+Оговорка для прогонов без модели: с `--no-llm` все колонки групп остаются пустыми, а
+`HistGradientBoostingRegressor` из scikit-learn 1.9 не может обучить бинаризацию на
+полностью пустой колонке, поэтому такую матрицу перед обучением нужно очистить:
+`matrix.drop(columns=[c for c in matrix if matrix[c].isna().all()])`. После полного
+прохода с моделью пустых колонок не остаётся (кроме редких уровней шоссе).
+
+Отчёт `reports/features_v2/report.md` дополнительно содержит заполненность полей
+извлечения, раскладку по каноническим уровням, покрытие колонок и расхождения карточки и
+извлечений. Полный проход по всем объявлениям занимает часы: два запроса на объявление к
+локальной модели, на этом датасете (1144 объявления, `qwen3.8` на CPU/GPU без рассуждений)
+— примерно 20–25 секунд на объявление, то есть ~7 часов без `--parallel`. Поэтому
+запускайте с `--verbose`, чтобы видеть прогресс и прогноз времени: кэш пишется после
+каждого объявления, и прерванный прогон продолжается с того же места.
+
 ### 4. Базовая модель: линейная регрессия → `experiments/<NN>/`
 
 ```bash
@@ -409,6 +471,7 @@ Markdown сам — поэтому у всех запусков одинаков
 | Базовые признаки | `reports/features/report.md` | `feature_summary.csv`, `feature_correlations.csv` |
 | Широкие признаки | `reports/features_rich/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
 | Компактные признаки (каркас + 10 групп) | `reports/features_v1/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
+| Компактная матрица v2 (каркас + группы из локальной модели) | `reports/features_v2/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `extraction_summary.csv`, `feature_levels.csv`, `value_ranges.csv` |
 | Признаки из текста (DeepSeek) | `reports/features_llm/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `llm_field_summary.csv` |
 | Эмбеддинги описаний | `data/features/embeddings_meta.json` | `embeddings.csv`, `embeddings.npy`, `embeddings_cache.jsonl` |
 | Линейная модель | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `coefficients.csv`, `predictions.csv`, `figures/` |
