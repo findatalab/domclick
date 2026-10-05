@@ -14,7 +14,8 @@
    как основная.
 
 Числа (метрики, важности признаков, диагностика остатков) не дублируются в этом файле,
-чтобы не расходиться с кодом: все они лежат в `reports/<этап>/`. Каждый отчёт
+чтобы не расходиться с кодом: отчёты EDA и признаков лежат в `reports/<этап>/`, а
+обучающие запуски — в `experiments/<номер>/` (см. раздел «Эксперименты»). Каждый отчёт
 пересоздаётся запуском соответствующего скрипта.
 
 ## Окружение, в котором получены отчёты
@@ -109,8 +110,8 @@ python -m venv .venv
 Все скрипты запускаются из корня репозитория. Скрипты анализа принимают `--input`
 (по умолчанию `data/dataset/objects.jsonl`), каталог отчётов — `--output-dir`
 (в `build_reach_features.py` и `build_reach_llm_features.py` — `--report-dir`)
-и `--verbose`. Обучающие скрипты принимают `--input`, каталог отчётов `--output-dir`
-и `--verbose`. Сборщик датасета принимает
+и `--verbose`. Обучающие скрипты принимают `--input`, `--experiments-dir` (корень
+экспериментов) и `--verbose`. Сборщик датасета принимает
 позиционный путь к выгрузкам и `--output`.
 
 ### 0. Сборка датасета из выгрузок (опционально)
@@ -308,7 +309,7 @@ python build_features_v1.py
 `reports/features_v1/report.md` показывает колонки и покрытие по группам, канонические
 уровни, расхождения карточки и извлечений и раскладку по статусам.
 
-### 4. Базовая модель: линейная регрессия → `reports/lin_reg_2f/`
+### 4. Базовая модель: линейная регрессия → `experiments/<NN>/`
 
 ```bash
 python train_lin_reg_2f.py
@@ -317,7 +318,7 @@ python train_lin_reg_2f.py
 `LinearRegression` на двух признаках, 5-фолдовая кросс-валидация, метрики out-of-fold,
 коэффициенты, диагностика остатков по квартилям прогноза и графики.
 
-### 5. Основная модель: градиентный бустинг → `reports/histgb/`
+### 5. Основная модель: градиентный бустинг → `experiments/<NN>/`
 
 ```bash
 python train_histgb.py
@@ -336,7 +337,7 @@ python train_histgb.py
 моделью предсказания среднего, permutation importance, посчитанную на тестовых фолдах,
 и диагностику остатков.
 
-### 6. kNN-регрессия → `reports/knn_v1/`
+### 6. kNN-регрессия → `experiments/<NN>/`
 
 ```bash
 python train_knn.py
@@ -357,7 +358,48 @@ python train_knn.py
 
 Отчёт содержит метрики на лог-шкале и в рублях, разбивку по фолдам, сравнение с базовой
 моделью, permutation importance и диагностику остатков. Пример запуска на своей матрице:
-`python train_knn.py --input data/features/features_rich.csv --output-dir reports/knn`.
+`python train_knn.py --input data/features/features_rich.csv --experiments-dir experiments`.
+
+## Эксперименты
+
+Обучающие скрипты следуют общему контракту эксперимента
+(`docs/experiment_contract.md`, реализация — `report_utils.py`). Каждый запуск получает
+следующий номер и отдельный каталог:
+
+```bash
+python train_histgb.py            # experiments/01/, затем 02/, 03/, ...
+python train_knn.py
+```
+
+```
+experiments/
+  index.csv      реестр всех запусков
+  01/
+    meta.json                 карточка запуска: данные, CV, все параметры CLI, окружение
+    report.md                 отчёт с единой шапкой
+    metrics.csv               метрики по фолдам в длинном формате
+                              (run_id, fold, model, metric, value)
+    fold_metrics.csv          пофолдовая таблица в формате скрипта
+    metrics_summary.csv       mean/std/min/max по каждой метрике
+    predictions.csv           out-of-fold прогнозы
+    residual_diagnostics.csv  ошибка и смещение по квартилям прогноза
+    figures/                  факт-прогноз и остатки
+  02/
+  ...
+```
+
+Обязательный минимум метрик — `r2_rub`, `rmse_rub`, `mae_rub`, `median_ae_rub`,
+`mape_pct`; ансамбли добавляют столбец `model` и, при обучении на логе, `r2_log`.
+Новые модели и новые наборы признаков проходят через тот же `report_utils`, поэтому
+запуски сравнимы: `pandas.read_csv("experiments/index.csv")` даёт реестр, а
+`meta.json` — полные параметры, версии и хеш матрицы. Корень экспериментов
+переопределяется ключом `--experiments-dir`.
+
+Тело отчёта тоже общее: скрипт передаёт данные и короткие формулировки в шаблоны
+`report_utils.build_body(...)` (`metrics_section`, `per_fold_section`, `baseline_section`,
+`residual_section`, `importance_section`, `tuning_section`, `text_section`), а не собирает
+Markdown сам — поэтому у всех запусков одинаковые шапка, порядок секций и список
+артефактов.
 
 ## Где смотреть результаты
 
@@ -369,9 +411,9 @@ python train_knn.py
 | Компактные признаки (каркас + 10 групп) | `reports/features_v1/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
 | Признаки из текста (DeepSeek) | `reports/features_llm/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `llm_field_summary.csv` |
 | Эмбеддинги описаний | `data/features/embeddings_meta.json` | `embeddings.csv`, `embeddings.npy`, `embeddings_cache.jsonl` |
-| Линейная модель | `reports/lin_reg_2f/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `coefficients.csv`, `predictions.csv`, `figures/` |
-| Бустинг | `reports/histgb/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `feature_importance.csv`, `predictions.csv`, `figures/` |
-| kNN | `reports/knn_v1/report.md` | `cv_metrics.csv`, `cv_summary.csv`, `feature_importance.csv`, `predictions.csv`, `tuning.csv`, `figures/` |
+| Линейная модель | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `coefficients.csv`, `predictions.csv`, `figures/` |
+| Бустинг | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `feature_importance.csv`, `predictions.csv`, `figures/` |
+| kNN | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `feature_importance.csv`, `predictions.csv`, `tuning.csv`, `figures/` |
 
 ## Условия воспроизводимости
 
@@ -386,9 +428,10 @@ python train_knn.py
   отклонению по фолдам, а не по одной цифре.
 - Целевая переменная сильно скошена, поэтому RMSE чувствителен к единичным объектам;
   в отчётах рядом приведены MAE и медианная абсолютная ошибка.
-- Отчёты пересоздаются запуском скрипта поверх прежних результатов. Чтобы сохранить
-  прежний прогон, укажите другой `--output-dir` (в `build_reach_features.py` —
-  `--report-dir`).
+- Отчёты EDA и признаков пересоздаются запуском скрипта поверх прежних результатов:
+  чтобы сохранить прежний прогон, укажите другой `--output-dir` (в
+  `build_reach_features.py` — `--report-dir`). Обучающие запуски не перезаписываются:
+  каждый получает новый номер в `experiments/`.
 
 ## Целостность данных и известные ловушки
 

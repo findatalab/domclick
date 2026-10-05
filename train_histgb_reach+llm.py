@@ -28,7 +28,9 @@ Key design points
 3. Grouped CV keeps near-duplicate listings of one locality out of the test set, and
    both members see exactly the same folds - required for a fair blend.
 4. LLM features are joined strictly on `listing_id`.
-5. Results go to reports/histgb_reach+llm/, never into another model's report directory.
+5. Results follow the shared experiment contract: a numbered directory under
+   `experiments/` with `meta.json`, `report.md` and canonical metric tables; the report
+   plumbing lives in `report_utils.py` (see docs/experiment_contract.md).
 """
 
 from __future__ import annotations
@@ -38,11 +40,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import matplotlib
-
-matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyRegressor
@@ -57,8 +54,12 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import GroupKFold, KFold, ParameterSampler
 
+import report_utils
+from report_utils import format_value
+
 
 LOG = logging.getLogger("domclick.ensemble.llm")
+MODEL_NAME = "histgb-reach-llm"
 IDENTIFIER_COLUMN = "listing_id"
 TARGET_COLUMN = "asking_price_rub"
 LOG_TARGET_COLUMN = "log_asking_price_rub"
@@ -102,11 +103,6 @@ def default_input_path() -> Path:
 def default_llm_input_path() -> Path:
     """Where build_llm_extractions.py writes the LLM-extracted features."""
     return Path(__file__).resolve().parent / "data" / "features" / "features_llm.csv"
-
-
-def default_report_dir() -> Path:
-    """Reports go to reports/, in a directory named after this model."""
-    return Path(__file__).resolve().parent / "reports" / "histgb_reach+llm"
 
 
 def merge_llm_features(frame: pd.DataFrame, llm_path: Path) -> pd.DataFrame:
@@ -436,11 +432,12 @@ def cross_validate(x: pd.DataFrame, y: pd.Series, groups: pd.Series,
 
         ensemble_r2 = fold_rows[ENSEMBLE_MODEL]["r2_rub"]
         if LLM_MODEL in fold_rows:
-            print(f"Фолд {fold}/{args.folds}: R² в рублях — ансамбль {ensemble_r2:.3f}, "
+            # ASCII only: консоль Windows (cp1251) не принимает R² и символ рубля.
+            print(f"Фолд {fold}/{args.folds}: R2 в рублях — ансамбль {ensemble_r2:.3f}, "
                   f"структурный {fold_rows[STRUCTURED_MODEL]['r2_rub']:.3f}, "
                   f"LLM {fold_rows[LLM_MODEL]['r2_rub']:.3f}")
         else:
-            print(f"Фолд {fold}/{args.folds}: R² в рублях = {ensemble_r2:.3f}")
+            print(f"Фолд {fold}/{args.folds}: R2 в рублях = {ensemble_r2:.3f}")
 
         if args.importance_repeats:
             structured_result = permutation_importance(
@@ -465,26 +462,6 @@ def cross_validate(x: pd.DataFrame, y: pd.Series, groups: pd.Series,
     return metrics, predicted_rub, predicted_log, baseline_predictions, importances, tuning_table
 
 
-def summary_table(metrics: pd.DataFrame) -> pd.DataFrame:
-    """Mean/std/min/max per metric, separately for every model."""
-    rows: list[dict[str, Any]] = []
-    for model in MODEL_NAMES:
-        subset = metrics[metrics["model"] == model]
-        if subset.empty:
-            continue
-        for metric in METRIC_COLUMNS:
-            values = subset[metric]
-            rows.append({
-                "model": model,
-                "metric": metric,
-                "mean": values.mean(),
-                "std": values.std(),
-                "min": values.min(),
-                "max": values.max(),
-            })
-    return pd.DataFrame(rows)
-
-
 def best_blend_weight(actual_log: np.ndarray, structured_log: np.ndarray,
                       llm_log: np.ndarray, points: int = 21) -> tuple[float, float]:
     """Grid-search the blend weight on OOF log predictions (diagnostic only).
@@ -503,106 +480,12 @@ def best_blend_weight(actual_log: np.ndarray, structured_log: np.ndarray,
     return float(grid[index]), float(scores[index])
 
 
-def residual_diagnostics(predictions: pd.DataFrame, quartiles: int = 4) -> pd.DataFrame:
-    """Error and bias by prediction quartile, to expose heteroscedasticity."""
-    frame = predictions.copy()
-    frame["prediction_group"] = pd.qcut(
-        frame["predicted_rub"], quartiles,
-        labels=[f"Q{index}" for index in range(1, quartiles + 1)],
-    )
-    return (
-        frame.groupby("prediction_group", observed=True)
-        .agg(
-            count=("actual_rub", "size"),
-            mean_predicted_rub=("predicted_rub", "mean"),
-            mean_actual_rub=("actual_rub", "mean"),
-            mean_residual_rub=("residual_rub", "mean"),
-            mean_abs_error_rub=("abs_error_rub", "mean"),
-        )
-        .reset_index()
-    )
-
-
-def save_figures(predictions: pd.DataFrame, figure_dir: Path) -> list[Path]:
-    """Out-of-fold diagnostics: predicted vs actual and residuals."""
-    figure_dir.mkdir(parents=True, exist_ok=True)
-    plt.rcParams.update({
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "DejaVu Sans"],
-        "axes.unicode_minus": False,
-        "figure.dpi": 120,
-    })
-    actual = predictions["actual_rub"].to_numpy(dtype=float)
-    predicted = predictions["predicted_rub"].to_numpy(dtype=float)
-    outputs: list[Path] = []
-
-    # Values and axis limits must share one unit; mixing rubles with millions clips
-    # every point and leaves an empty-looking chart.
-    limit = float(np.quantile(np.concatenate([actual, predicted]), 0.99)) / 1e6
-    fig, ax = plt.subplots(figsize=(9, 7))
-    ax.scatter(actual / 1e6, predicted / 1e6, alpha=0.4, s=18,
-               color="#2563eb", edgecolors="none")
-    ax.plot([0, limit], [0, limit], color="#dc2626", linewidth=1.4,
-            label="идеальное совпадение")
-    ax.set(title="Факт и прогноз цены, ансамбль двух HistGB (out-of-fold)",
-           xlabel="Факт, млн руб.",
-           ylabel="Прогноз, млн руб.", xlim=(0, limit), ylim=(0, limit))
-    ax.legend()
-    ax.grid(alpha=0.25)
-    fig.tight_layout()
-    path = figure_dir / "actual_vs_predicted.png"
-    fig.savefig(path, dpi=180)
-    plt.close(fig)
-    outputs.append(path)
-
-    residuals = (actual - predicted) / 1e6
-    cap = float(np.quantile(np.abs(residuals), 0.99))
-    predicted_mln = predicted / 1e6
-    x_cap = float(np.quantile(predicted_mln, 0.99))
-    fig, ax = plt.subplots(figsize=(9, 6))
-    ax.scatter(predicted_mln, residuals, alpha=0.4, s=18,
-               color="#7c3aed", edgecolors="none")
-    ax.axhline(0, color="#dc2626", linewidth=1.4)
-    ax.set(title="Остатки ансамбля двух HistGB (out-of-fold)", xlabel="Прогноз, млн руб.",
-           ylabel="Остаток, млн руб.",
-           xlim=(min(predicted_mln.min(), 0), x_cap), ylim=(-cap, cap))
-    ax.grid(alpha=0.25)
-    fig.tight_layout()
-    path = figure_dir / "residuals.png"
-    fig.savefig(path, dpi=180)
-    plt.close(fig)
-    outputs.append(path)
-    return outputs
-
-
-def format_value(value: Any) -> str:
-    """Readable value: integers as is, floats with spaces as separators."""
-    if value is None or (not isinstance(value, str) and pd.isna(value)):
-        return "—"
-    if isinstance(value, str):
-        return value
-    if isinstance(value, (int, np.integer)):
-        return f"{value:,}".replace(",", " ")
-    if abs(float(value)) >= 1000:
-        return f"{float(value):,.0f}".replace(",", " ").replace("-", "−")
-    return f"{float(value):.4f}".replace(".", ",")
-
-
-def markdown_table(frame: pd.DataFrame) -> str:
-    """Build a small Markdown table without relying on the optional tabulate package."""
-    if frame.empty:
-        return "_Нет данных._"
-    headers = [str(name) for name in frame.columns]
-    lines = ["| " + " | ".join(headers) + " |",
-             "| " + " | ".join("---" for _ in headers) + " |"]
-    for row in frame.itertuples(index=False, name=None):
-        lines.append("| " + " | ".join(format_value(value) for value in row) + " |")
-    return "\n".join(lines)
-
-
 def run(args: argparse.Namespace) -> None:
+    report_utils.ensure_metrics(METRIC_COLUMNS)
+    experiments_dir = args.experiments_dir.expanduser()
+    run_id, run_dir = report_utils.create_run_dir(experiments_dir)
+    LOG.info("Каталог запуска: %s", run_dir)
     input_path: Path = args.input
-    output_dir: Path = args.output_dir
     llm_path: Path | None = args.llm_input if args.use_llm_features else None
     x, y, groups, identifiers, feature_columns = load_data(input_path, llm_path)
     structured_columns, llm_columns = split_feature_columns(feature_columns)
@@ -626,7 +509,7 @@ def run(args: argparse.Namespace) -> None:
     )
     structured_importance = importances.get(STRUCTURED_MODEL, pd.DataFrame())
     llm_importance = importances.get(LLM_MODEL, pd.DataFrame())
-    summary = summary_table(metrics)
+    summary = report_utils.metric_summary(metrics, METRIC_COLUMNS, model_column="model")
 
     def mean_metric(model: str, metric: str) -> float:
         subset = summary[(summary["model"] == model) & (summary["metric"] == metric)]
@@ -645,50 +528,27 @@ def run(args: argparse.Namespace) -> None:
     oof["abs_error_rub"] = oof["residual_rub"].abs()
     oof["predicted_log"] = predicted_log[ENSEMBLE_MODEL]
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    metrics.to_csv(output_dir / "cv_metrics.csv", index=False, encoding="utf-8-sig")
-    summary.to_csv(output_dir / "cv_summary.csv", index=False, encoding="utf-8-sig")
-    oof.to_csv(output_dir / "predictions.csv", index=False, encoding="utf-8-sig")
-    diagnostics = residual_diagnostics(oof)
-    diagnostics.to_csv(output_dir / "residual_diagnostics.csv", index=False, encoding="utf-8-sig")
+    diagnostics = report_utils.residual_diagnostics(oof)
+    charts = report_utils.save_figures(
+        oof, run_dir / "figures", title_prefix="Ансамбль двух HistGB",
+    )
+    report_utils.long_metrics(
+        metrics, METRIC_COLUMNS, run_id=run_id, model_column="model",
+    ).to_csv(run_dir / "metrics.csv", index=False, encoding="utf-8-sig")
+    metrics.to_csv(run_dir / "fold_metrics.csv", index=False, encoding="utf-8-sig")
+    summary.to_csv(run_dir / "metrics_summary.csv", index=False, encoding="utf-8-sig")
+    oof.to_csv(run_dir / "predictions.csv", index=False, encoding="utf-8-sig")
+    diagnostics.to_csv(run_dir / "residual_diagnostics.csv", index=False, encoding="utf-8-sig")
     if not structured_importance.empty:
-        structured_importance.to_csv(output_dir / "feature_importance.csv", index=False,
+        structured_importance.to_csv(run_dir / "feature_importance.csv", index=False,
                                      encoding="utf-8-sig")
     if not llm_importance.empty:
-        llm_importance.to_csv(output_dir / "feature_importance_llm.csv", index=False,
+        llm_importance.to_csv(run_dir / "feature_importance_llm.csv", index=False,
                               encoding="utf-8-sig")
     if not tuning.empty:
-        tuning.to_csv(output_dir / "tuning.csv", index=False, encoding="utf-8-sig")
-    charts = save_figures(oof, output_dir / "figures")
+        tuning.to_csv(run_dir / "tuning.csv", index=False, encoding="utf-8-sig")
 
-    metric_labels = {
-        "r2_log": "R² (лог)", "r2_rub": "R² (руб.)", "rmse_rub": "RMSE, ₽",
-        "mae_rub": "MAE, ₽", "median_ae_rub": "MedAE, ₽", "mape_pct": "MAPE, %",
-    }
-    metrics_wide = (
-        summary.pivot(index="metric", columns="model", values="mean")
-        .reindex(METRIC_COLUMNS)
-        .rename(index=metric_labels)
-        .rename(columns=MODEL_LABELS)
-    )
-    per_fold_table = metrics[[
-        "fold", "model", "n_iter", "clipped", "r2_log", "r2_rub",
-        "rmse_rub", "mae_rub", "median_ae_rub", "mape_pct",
-    ]].rename(columns={"fold": "Фолд", "model": "Модель", "n_iter": "Итераций",
-                       "clipped": "Обрезано", **metric_labels})
-    per_fold_table["Модель"] = per_fold_table["Модель"].map(MODEL_LABELS)
-
-    model_lines = [
-        f"- **{MODEL_LABELS[model]}**: R² в рублях "
-        f"**{format_value(mean_metric(model, 'r2_rub'))}**, "
-        f"RMSE **{format_value(mean_metric(model, 'rmse_rub'))} ₽**, "
-        f"MAE **{format_value(mean_metric(model, 'mae_rub'))} ₽**."
-        for model in MODEL_NAMES if (summary["model"] == model).any()
-    ]
-
-    ensemble_rmse = mean_metric(ENSEMBLE_MODEL, "rmse_rub")
     baseline_rmse = root_mean_squared_error(oof["actual_rub"], oof["baseline_rub"])
-    improvement = (1 - ensemble_rmse / baseline_rmse) * 100
 
     blend_numbers = (
         f"Предсказания объединяются на лог-шкале: `{format_value(args.blend_weight)}·"
@@ -718,31 +578,6 @@ def run(args: argparse.Namespace) -> None:
         blend_numbers = ("LLM-признаки отключены (`--no-llm-features`): ансамбль вырождается "
                          "в одну структурную модель HistGB.")
 
-    cheapest, dearest = diagnostics.iloc[0], diagnostics.iloc[-1]
-    error_gap = dearest["mean_abs_error_rub"] / cheapest["mean_abs_error_rub"]
-    low_bias = float(cheapest["mean_residual_rub"])
-    high_bias = float(dearest["mean_residual_rub"])
-    # Describe the bias pattern from the numbers instead of asserting a sign flip:
-    # depending on the target scale and clipping the ensemble may be biased one way.
-    if low_bias * high_bias < 0:
-        bias_sentence = (
-            f"Смещение (`факт − прогноз`) меняет знак: **{format_value(low_bias)}** ₽ в нижнем "
-            f"квартиле против **{format_value(high_bias)}** ₽ в верхнем, то есть ансамбль "
-            "переоценивает один конец рынка и недооценивает другой."
-        )
-    elif low_bias >= 0 and high_bias >= 0:
-        bias_sentence = (
-            f"Смещение (`факт − прогноз`) остаётся положительным во всех квартилях: "
-            f"**{format_value(low_bias)}** ₽ в нижнем против **{format_value(high_bias)}** ₽ "
-            "в верхнем. Ансамбль систематически занижает цену, и сильнее всего — "
-            "в дорогом сегменте."
-        )
-    else:
-        bias_sentence = (
-            f"Смещение (`факт − прогноз`) остаётся отрицательным во всех квартилях: "
-            f"**{format_value(low_bias)}** ₽ в нижнем против **{format_value(high_bias)}** ₽ "
-            "в верхнем. Ансамбль систематически завышает цену."
-        )
     nan_cells = int(x.isna().sum().sum())
     rows_with_nan = int(x.isna().any(axis=1).sum())
     if args.cv == "group":
@@ -759,117 +594,71 @@ def run(args: argparse.Namespace) -> None:
             "Для честной оценки используйте `--cv group`."
         )
 
-    report = [
-        "# Ансамбль из двух HistGB: структурные признаки и LLM-признаки",
-        "",
-        f"Данные: `{input_path}`"
-        + (f" + LLM-признаки `{llm_path}`" if use_llm
-           else " (LLM-признаки отключены)"),
-        "",
-        "## Состав ансамбля",
-        f"- **{MODEL_LABELS[STRUCTURED_MODEL]}**: `HistGradientBoostingRegressor` "
-        f"(`max_iter={args.max_iter}`, early stopping; признаков: {len(structured_columns)}).",
-        *([f"- **{MODEL_LABELS[LLM_MODEL]}**: `HistGradientBoostingRegressor` "
-           f"(`max_iter={args.max_iter}`, early stopping; LLM-признаков: {len(llm_columns)})."]
-          if use_llm else ["- Модель на LLM-признаках отключена (`--no-llm-features`)."]),
-        f"- **{MODEL_LABELS[ENSEMBLE_MODEL]}**: взвешенное среднее на лог-шкале.",
-        "",
-        f"Признаков всего: **{len(feature_columns)}** (структурных: "
-        f"**{len(structured_columns)}**, LLM: **{len(llm_columns)}**); "
-        f"строк: **{len(x):,}**; пропусков в матрице: **{nan_cells:,}**.",
-        f"Цель: `log({TARGET_COLUMN})`; метрики пересчитаны в рубли через `expm1`.",
-        f"Валидация: {'GroupKFold по `' + GROUP_COLUMN + '`' if args.cv == 'group' else 'KFold'} "
-        f"({args.folds} фолдов, групп: {groups.nunique():,}, seed {args.seed}); оба члена "
-        "ансамбля обучаются на одних и тех же фолдах.",
-        f"Подбор гиперпараметров структурной модели: "
-        f"{'внутренний перебор на ' + str(args.tune) + ' кандидатах' if args.tune else 'не выполнялся'}.",
-        "",
-        "## Метрики (среднее по фолдам)",
-        "",
-        *model_lines,
-        "",
-        "### Средние значения по метрикам",
-        markdown_table(metrics_wide.reset_index().rename(columns={"metric": "Метрика"})),
-        "",
-        "## Метрики по фолдам",
-        markdown_table(per_fold_table),
-        "",
-        "## Смешивание моделей",
-        blend_numbers,
-        *([blend_diagnostic] if blend_diagnostic else []),
-        "",
-        "## Сравнение с базовой моделью",
-        "Базовая модель предсказывает среднее по обучающей части фолда "
-        "(обратное преобразование лога — геометрическое среднее): "
-        f"RMSE **{format_value(baseline_rmse)}** ₽.",
-        f"Ансамбль снижает RMSE относительно базовой модели на **{improvement:.1f} %**.",
-        "",
-    ]
-
-    if not structured_importance.empty:
-        report += [
-            "## Важность признаков структурной модели",
-            "Permutation importance на тестовых фолдах (без утечки из обучения). "
-            "Падение R² на лог-шкале:",
-            markdown_table(structured_importance.head(15).rename(columns={
-                "feature": "Признак", "importance_mean_r2_log": "Падение R²",
-            })),
+    body = report_utils.build_body(
+        [
+            "## Состав ансамбля",
+            f"- **{MODEL_LABELS[STRUCTURED_MODEL]}**: `HistGradientBoostingRegressor` "
+            f"(`max_iter={args.max_iter}`, early stopping; признаков: {len(structured_columns)}).",
+            *([f"- **{MODEL_LABELS[LLM_MODEL]}**: `HistGradientBoostingRegressor` "
+               f"(`max_iter={args.max_iter}`, early stopping; LLM-признаков: {len(llm_columns)})."]
+              if use_llm else ["- Модель на LLM-признаках отключена (`--no-llm-features`)."]),
+            f"- **{MODEL_LABELS[ENSEMBLE_MODEL]}**: взвешенное среднее на лог-шкале.",
             "",
-        ]
+            f"Признаков всего: **{len(feature_columns)}** (структурных: "
+            f"**{len(structured_columns)}**, LLM: **{len(llm_columns)}**); "
+            f"пропусков в матрице: **{nan_cells:,}**; групп: {groups.nunique():,}.",
+            f"Цель: `log({TARGET_COLUMN})`; метрики пересчитаны в рубли через `expm1`; "
+            "оба члена ансамбля обучаются на одних и тех же фолдах.",
+            f"Подбор гиперпараметров структурной модели: "
+            f"{'внутренний перебор на ' + str(args.tune) + ' кандидатах' if args.tune else 'не выполнялся'}.",
+        ],
+        report_utils.metrics_section(summary, METRIC_COLUMNS, model_column="model",
+                                     model_labels=MODEL_LABELS),
+        report_utils.per_fold_section(
+            metrics, ["fold", "model", "n_iter", "clipped", *METRIC_COLUMNS],
+            model_column="model", model_labels=MODEL_LABELS,
+        ),
+        report_utils.text_section("Смешивание моделей", [blend_numbers, blend_diagnostic]),
+        report_utils.baseline_section(
+            baseline_rmse=baseline_rmse,
+            model_rmse=mean_metric(ENSEMBLE_MODEL, "rmse_rub"),
+            model_label="Ансамбль",
+            note="Базовая модель предсказывает среднее по обучающей части фолда "
+                 "(обратное преобразование лога — геометрическое среднее):",
+        ),
 
-    if not llm_importance.empty:
-        report += [
-            "## Важность LLM-признаков",
-            "Permutation importance второй модели (обучена только на `llm_*`), "
-            "на тестовых фолдах:",
-            markdown_table(llm_importance.head(15).rename(columns={
-                "feature": "Признак", "importance_mean_r2_log": "Падение R²",
-            })),
-            "",
-        ]
-
-    if not tuning.empty:
-        best_rows = tuning.sort_values("rmse_log_mean").groupby("fold").head(1)
-        report += [
-            "## Подбор гиперпараметров структурной модели",
-            "Поиск выполняется на внутренней групповой разбивке обучающей части фолда, "
-            "тестовый фолд в подборе не участвует. Лучший кандидат каждого фолда:",
-            markdown_table(best_rows[[
-                "fold", "rmse_log_mean", "learning_rate", "max_leaf_nodes",
-                "min_samples_leaf", "l2_regularization",
-            ]].rename(columns={
-                "fold": "Фолд", "rmse_log_mean": "RMSE (лог)",
-            })),
-            "",
-        ]
-
-    report += [
-        "## Диагностика остатков ансамбля",
-        "Средняя абсолютная ошибка и смещение по квартилям прогноза:",
-        markdown_table(diagnostics.rename(columns={
-            "prediction_group": "Квартиль прогноза",
-            "count": "Строк",
-            "mean_predicted_rub": "Средний прогноз, ₽",
-            "mean_actual_rub": "Средний факт, ₽",
-            "mean_residual_rub": "Среднее смещение, ₽",
-            "mean_abs_error_rub": "Средняя абс. ошибка, ₽",
-        })),
-        f"Средняя абсолютная ошибка растёт от нижнего квартиля прогноза "
-        f"(**{format_value(cheapest['mean_abs_error_rub'])}** ₽) к верхнему "
-        f"(**{format_value(dearest['mean_abs_error_rub'])}** ₽) — в **{error_gap:.1f}** раза.",
-        bias_sentence,
-        "Остаточная гетероскедастичность ожидаема: дорогие объекты разнороднее, "
-        "а обучающих примеров в верхнем сегменте мало.",
-        "",
-        "## Обработка пропусков",
-        "Пропуски **не заполняются**: обе модели — `HistGradientBoostingRegressor`, "
-        "который сам направляет объекты с NaN в отдельную ветвь. Это принципиально, "
-        f"потому что в матрице **{nan_cells:,}** пропущенных ячеек, и хотя бы один "
-        f"пропуск есть в **{rows_with_nan:,}** из **{len(x):,}** строк "
-        f"({rows_with_nan / len(x) * 100:.1f} %). Построчное удаление пропусков "
-        f"оставило бы **{len(x) - rows_with_nan:,}** строк — HistGB сохраняет все данные.",
-        "",
-        "## Ограничения",
+        report_utils.importance_section(
+            structured_importance,
+            title="## Важность признаков структурной модели",
+            intro="Permutation importance на тестовых фолдах (без утечки из обучения). "
+                  "Падение R² на лог-шкале:",
+        ),
+        report_utils.importance_section(
+            llm_importance,
+            title="## Важность LLM-признаков",
+            intro="Permutation importance второй модели (обучена только на `llm_*`), "
+                  "на тестовых фолдах:",
+        ),
+        report_utils.tuning_section(
+            tuning, ["fold", "rmse_log_mean", "learning_rate", "max_leaf_nodes",
+                     "min_samples_leaf", "l2_regularization"],
+            title="## Подбор гиперпараметров структурной модели",
+        ),
+        report_utils.residual_section(
+            diagnostics, title="## Диагностика остатков ансамбля", subject="ансамбль",
+            conclusion="Остаточная гетероскедастичность ожидаема: дорогие объекты "
+                       "разнороднее, а обучающих примеров в верхнем сегменте мало.",
+        ),
+        report_utils.text_section("Обработка пропусков", [
+            "Пропуски **не заполняются**: обе модели — `HistGradientBoostingRegressor`, "
+            "который сам направляет объекты с NaN в отдельную ветвь. Это принципиально, "
+            f"потому что в матрице **{nan_cells:,}** пропущенных ячеек, и хотя бы один "
+            f"пропуск есть в **{rows_with_nan:,}** из **{len(x):,}** строк "
+            f"({rows_with_nan / len(x) * 100:.1f} %). Построчное удаление пропусков "
+            f"оставило бы **{len(x) - rows_with_nan:,}** строк — HistGB сохраняет все данные.",
+        ]),
+    )
+    limitations = [
         "- `asking_price_rub` — цена предложения, а не подтверждённая цена сделки.",
         cv_note,
         "- Вес ансамбля по умолчанию фиксирован (0,5 на лог-шкале). Оптимальный вес из "
@@ -889,22 +678,31 @@ def run(args: argparse.Namespace) -> None:
         "поэтому модель не выдаёт цены за пределами наблюдённого диапазона.",
         "- Ансамбль не экстраполирует: для объектов вне обучающего распределения "
         "(другой регион, другой тип недвижимости) прогноз не обоснован.",
-        "",
-        "## Файлы",
-        f"- Метрики по фолдам: `{output_dir / 'cv_metrics.csv'}`",
-        f"- Сводка метрик: `{output_dir / 'cv_summary.csv'}`",
-        f"- Прогнозы out-of-fold (ансамбль, структурная, LLM): "
-        f"`{output_dir / 'predictions.csv'}`",
-        f"- Диагностика остатков: `{output_dir / 'residual_diagnostics.csv'}`",
-        *([f"- Важность признаков структурной модели: "
-           f"`{output_dir / 'feature_importance.csv'}`"]
-          if not structured_importance.empty else []),
-        *([f"- Важность LLM-признаков: `{output_dir / 'feature_importance_llm.csv'}`"]
-          if not llm_importance.empty else []),
-        *([f"- Результаты подбора: `{output_dir / 'tuning.csv'}`"] if not tuning.empty else []),
-        *[f"- График: `{path}`" for path in charts],
     ]
-    (output_dir / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    artifacts = [
+        "report.md", "metrics.csv", "fold_metrics.csv", "metrics_summary.csv",
+        "predictions.csv", "residual_diagnostics.csv",
+        *(["feature_importance.csv"] if not structured_importance.empty else []),
+        *(["feature_importance_llm.csv"] if not llm_importance.empty else []),
+        *(["tuning.csv"] if not tuning.empty else []),
+        *[f"figures/{path.name}" for path in charts],
+    ]
+    manifest = report_utils.build_manifest(
+        run_id=run_id, script=Path(__file__).name, model=MODEL_NAME, input_path=input_path,
+        rows=len(x), features=len(feature_columns), target=TARGET_COLUMN,
+        group_column=GROUP_COLUMN, cv_scheme=args.cv, folds=args.folds, seed=args.seed,
+        params=report_utils.cli_params(args), artifacts=artifacts,
+        extra_inputs={"llm_input": llm_path} if llm_path else None,
+        primary_value=mean_metric(ENSEMBLE_MODEL, report_utils.PRIMARY_METRIC),
+    )
+    (run_dir / "report.md").write_text(
+        report_utils.render_report(
+            title="Ансамбль из двух HistGB: структурные признаки и LLM-признаки",
+            manifest=manifest, body=body, limitations=limitations,
+        ),
+        encoding="utf-8",
+    )
+    index_path = report_utils.finish_run(experiments_dir, run_dir, manifest)
 
     print(f"Rows: {len(x):,}; structured features: {len(structured_columns)}; "
           f"LLM features: {len(llm_columns)}; folds: {args.folds}".replace(",", " "))
@@ -915,7 +713,7 @@ def run(args: argparse.Namespace) -> None:
             print(f"{MODEL_LABELS[model]}: R2 (rub) = {r2:.3f}; "
                   f"MAE (rub) = {mae:,.0f}".replace(",", " "))
     print(f"Baseline RMSE (rub): {baseline_rmse:,.0f}".replace(",", " "))
-    print(f"Reports: {output_dir}")
+    print(f"Эксперимент: {run_dir}; реестр: {index_path}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -941,8 +739,8 @@ def parse_args() -> argparse.Namespace:
         help="Вес структурной модели в ансамбле на лог-шкале (0..1; LLM-модель получает 1-w).",
     )
     parser.add_argument(
-        "--output-dir", type=Path, default=default_report_dir(),
-        help="Каталог для отчёта и метрик (по умолчанию reports/histgb_reach+llm).",
+        "--experiments-dir", type=Path, default=report_utils.default_experiments_dir(__file__),
+        help="Корень экспериментов; запуск получит следующий номер (по умолчанию experiments/).",
     )
     parser.add_argument(
         "--cv", choices=("group", "kfold"), default="group",

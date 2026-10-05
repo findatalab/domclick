@@ -3,7 +3,13 @@
 
 Model:    LinearRegression on the numeric feature columns of the input table.
 Target:   asking_price_rub (asking price, not a confirmed sale price).
-Default:  5-fold KFold cross-validation, reports written under reports/lin_reg_2f/.
+Default:  5-fold KFold cross-validation.
+
+Results follow the shared experiment contract (see docs/experiment_contract.md):
+each run gets its own numbered directory under `experiments/` (`01`, `02`, ...) with
+`meta.json`, `report.md`, canonical `metrics.csv`, `metrics_summary.csv`,
+`predictions.csv`, residual diagnostics and figures. The run is registered in
+`experiments/index.csv`. Report plumbing lives in `report_utils.py`.
 
 The feature set is derived from the input table (every column except the
 identifier and the target), so adding features in build_features.py is enough.
@@ -16,11 +22,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import matplotlib
-
-matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyRegressor
@@ -34,21 +35,20 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import KFold
 
+import report_utils
+
 
 LOG = logging.getLogger("domclick.linreg")
 IDENTIFIER_COLUMNS = ("listing_id",)
 TARGET_COLUMN = "asking_price_rub"
-METRIC_COLUMNS = ("r2", "rmse_rub", "mae_rub", "median_ae_rub", "mape_pct")
+MODEL_NAME = "lin-reg-2f"
+# Canonical metric names required by the experiment contract (r2 in ruble terms).
+METRIC_COLUMNS = ("r2_rub", "rmse_rub", "mae_rub", "median_ae_rub", "mape_pct")
 
 
 def default_input_path() -> Path:
     """Where build_features.py writes the modeling table."""
     return Path(__file__).resolve().parent / "data" / "features" / "features.csv"
-
-
-def default_report_dir() -> Path:
-    """Reports go to reports/, separate from the data."""
-    return Path(__file__).resolve().parent / "reports" / "lin_reg_2f"
 
 
 def load_features(path: Path) -> tuple[pd.DataFrame, pd.Series]:
@@ -90,7 +90,7 @@ def load_features(path: Path) -> tuple[pd.DataFrame, pd.Series]:
 def score_fold(actual: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
     """Regression metrics for one fold, all on the ruble scale."""
     return {
-        "r2": float(r2_score(actual, predicted)),
+        "r2_rub": float(r2_score(actual, predicted)),
         "rmse_rub": float(root_mean_squared_error(actual, predicted)),
         "mae_rub": float(mean_absolute_error(actual, predicted)),
         "median_ae_rub": float(median_absolute_error(actual, predicted)),
@@ -104,7 +104,6 @@ def cross_validate(x: pd.DataFrame, y: pd.Series, folds: int,
     kfold = KFold(n_splits=folds, shuffle=True, random_state=seed)
     rows: list[dict[str, Any]] = []
     predictions = np.full(len(y), np.nan)
-    baseline_predictions = np.full(len(y), np.nan)
 
     for fold, (train_index, test_index) in enumerate(kfold.split(x), start=1):
         x_train, x_test = x.iloc[train_index], x.iloc[test_index]
@@ -114,10 +113,6 @@ def cross_validate(x: pd.DataFrame, y: pd.Series, folds: int,
         model.fit(x_train, y_train)
         predicted = model.predict(x_test)
         predictions[test_index] = predicted
-
-        baseline = DummyRegressor(strategy="mean")
-        baseline.fit(x_train, y_train)
-        baseline_predictions[test_index] = baseline.predict(x_test)
 
         row: dict[str, Any] = {
             "fold": fold,
@@ -134,7 +129,7 @@ def cross_validate(x: pd.DataFrame, y: pd.Series, folds: int,
     return metrics, y, predictions
 
 
-def baseline_metrics(y: pd.Series, metrics: pd.DataFrame, folds: int, seed: int,
+def baseline_metrics(y: pd.Series, folds: int, seed: int,
                      x: pd.DataFrame) -> dict[str, float]:
     """Score the mean-predictor baseline with the same folds for comparison."""
     kfold = KFold(n_splits=folds, shuffle=True, random_state=seed)
@@ -146,21 +141,6 @@ def baseline_metrics(y: pd.Series, metrics: pd.DataFrame, folds: int, seed: int,
             y.iloc[test_index].to_numpy(), baseline.predict(x.iloc[test_index])
         ))
     return pd.DataFrame(rows).mean(numeric_only=True).to_dict()
-
-
-def summary_table(metrics: pd.DataFrame) -> pd.DataFrame:
-    """Mean/std/min/max per metric across folds."""
-    rows: list[dict[str, Any]] = []
-    for metric in METRIC_COLUMNS:
-        values = metrics[metric]
-        rows.append({
-            "metric": metric,
-            "mean": values.mean(),
-            "std": values.std(),
-            "min": values.min(),
-            "max": values.max(),
-        })
-    return pd.DataFrame(rows)
 
 
 def coefficient_table(x: pd.DataFrame, y: pd.Series,
@@ -189,117 +169,23 @@ def coefficient_table(x: pd.DataFrame, y: pd.Series,
     return pd.DataFrame(rows)
 
 
-def residual_diagnostics(predictions: pd.DataFrame, quartiles: int = 4) -> pd.DataFrame:
-    """Error and bias by prediction quartile, to expose heteroscedasticity."""
-    frame = predictions.copy()
-    frame["prediction_group"] = pd.qcut(
-        frame["predicted_rub"], quartiles,
-        labels=[f"Q{index}" for index in range(1, quartiles + 1)],
-    )
-    grouped = (
-        frame.groupby("prediction_group", observed=True)
-        .agg(
-            count=("actual_rub", "size"),
-            mean_predicted_rub=("predicted_rub", "mean"),
-            mean_actual_rub=("actual_rub", "mean"),
-            mean_residual_rub=("residual_rub", "mean"),
-            mean_abs_error_rub=("abs_error_rub", "mean"),
-        )
-        .reset_index()
-    )
-    return grouped
+def run(args: argparse.Namespace) -> None:
+    report_utils.ensure_metrics(METRIC_COLUMNS)
+    experiments_dir = args.experiments_dir.expanduser()
+    run_id, run_dir = report_utils.create_run_dir(experiments_dir)
+    LOG.info("Каталог запуска: %s", run_dir)
 
-
-def save_figures(y: pd.Series, predictions: np.ndarray, figure_dir: Path) -> list[Path]:
-    """Out-of-fold diagnostics: predicted vs actual and residuals."""
-    figure_dir.mkdir(parents=True, exist_ok=True)
-    plt.rcParams.update({
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "DejaVu Sans"],
-        "axes.unicode_minus": False,
-        "figure.dpi": 120,
-    })
-    actual = y.to_numpy(dtype=float)
-    outputs: list[Path] = []
-
-    # Axis limits follow the 99th percentile so outliers do not flatten the cloud.
-    # Both values and limits are in millions of rubles — mixing units would clip every point.
-    limit = float(np.quantile(np.concatenate([actual, predictions]), 0.99)) / 1e6
-    fig, ax = plt.subplots(figsize=(9, 7))
-    ax.scatter(actual / 1e6, predictions / 1e6, alpha=0.4, s=18,
-               color="#2563eb", edgecolors="none")
-    ax.plot([0, limit], [0, limit], color="#dc2626", linewidth=1.4,
-            label="идеальное совпадение")
-    ax.set(title="Факт и прогноз цены (out-of-fold)", xlabel="Факт, млн ₽",
-           ylabel="Прогноз, млн ₽", xlim=(0, limit), ylim=(0, limit))
-    ax.legend()
-    ax.grid(alpha=0.25)
-    fig.tight_layout()
-    path = figure_dir / "actual_vs_predicted.png"
-    fig.savefig(path, dpi=180)
-    plt.close(fig)
-    outputs.append(path)
-
-    residuals = (actual - predictions) / 1e6
-    cap = float(np.quantile(np.abs(residuals), 0.99))
-    predicted_mln = predictions / 1e6
-    x_cap = float(np.quantile(predicted_mln, 0.99))
-    fig, ax = plt.subplots(figsize=(9, 6))
-    ax.scatter(predicted_mln, residuals, alpha=0.4, s=18,
-               color="#7c3aed", edgecolors="none")
-    ax.axhline(0, color="#dc2626", linewidth=1.4)
-    ax.set(title="Остатки модели (out-of-fold)",
-           xlabel="Прогноз, млн ₽", ylabel="Остаток, млн ₽",
-           xlim=(min(predicted_mln.min(), 0), x_cap), ylim=(-cap, cap))
-    ax.grid(alpha=0.25)
-    fig.tight_layout()
-    path = figure_dir / "residuals.png"
-    fig.savefig(path, dpi=180)
-    plt.close(fig)
-    outputs.append(path)
-    return outputs
-
-
-def format_value(value: Any) -> str:
-    """Readable value: integers as is, floats with spaces as separators."""
-    if value is None or (not isinstance(value, str) and pd.isna(value)):
-        return "—"
-    if isinstance(value, str):
-        return value
-    if isinstance(value, (int, np.integer)):
-        return f"{value:,}".replace(",", " ")
-    if abs(float(value)) >= 1000:
-        return f"{float(value):,.0f}".replace(",", " ").replace("-", "−")
-    return f"{float(value):.3f}".replace(".", ",")
-
-
-def markdown_table(frame: pd.DataFrame) -> str:
-    """Build a small Markdown table without relying on the optional tabulate package."""
-    if frame.empty:
-        return "_Нет данных._"
-    headers = [str(name) for name in frame.columns]
-    lines = ["| " + " | ".join(headers) + " |",
-             "| " + " | ".join("---" for _ in headers) + " |"]
-    for row in frame.itertuples(index=False, name=None):
-        lines.append("| " + " | ".join(format_value(value) for value in row) + " |")
-    return "\n".join(lines)
-
-
-def run(input_path: Path, output_dir: Path, folds: int, seed: int) -> None:
+    input_path = args.input.expanduser()
     x, y = load_features(input_path)
-    if len(x) < folds:
-        raise SystemExit(f"Строк ({len(x)}) меньше числа фолдов ({folds}).")
+    if len(x) < args.folds:
+        raise SystemExit(f"Строк ({len(x)}) меньше числа фолдов ({args.folds}).")
 
-    metrics, y_all, predictions = cross_validate(x, y, folds, seed)
-    baseline = baseline_metrics(y, metrics, folds, seed, x)
-    summary = summary_table(metrics)
+    metrics, y_all, predictions = cross_validate(x, y, args.folds, args.seed)
+    baseline = baseline_metrics(y, args.folds, args.seed, x)
+    summary = report_utils.metric_summary(metrics, METRIC_COLUMNS)
     coefficients = coefficient_table(x, y_all, metrics)
     summary_by_metric = summary.set_index("metric")
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    metrics.to_csv(output_dir / "cv_metrics.csv", index=False, encoding="utf-8-sig")
-    summary.to_csv(output_dir / "cv_summary.csv", index=False, encoding="utf-8-sig")
-    coefficients.to_csv(output_dir / "coefficients.csv", index=False, encoding="utf-8-sig")
     predictions_frame = pd.DataFrame({
         "row_index": np.arange(len(y_all)),
         "actual_rub": y_all.to_numpy(dtype=float),
@@ -309,98 +195,75 @@ def run(input_path: Path, output_dir: Path, folds: int, seed: int) -> None:
         predictions_frame["actual_rub"] - predictions_frame["predicted_rub"]
     )
     predictions_frame["abs_error_rub"] = predictions_frame["residual_rub"].abs()
-    predictions_frame.to_csv(output_dir / "predictions.csv", index=False, encoding="utf-8-sig")
-    diagnostics = residual_diagnostics(predictions_frame)
-    diagnostics.to_csv(output_dir / "residual_diagnostics.csv", index=False, encoding="utf-8-sig")
-    charts = save_figures(y_all, predictions, output_dir / "figures")
+    diagnostics = report_utils.residual_diagnostics(predictions_frame)
+    charts = report_utils.save_figures(
+        predictions_frame, run_dir / "figures", title_prefix="Линейная регрессия",
+    )
 
-    def metric_summary(name: str) -> str:
-        row = summary_by_metric.loc[name]
-        return f"{format_value(row['mean'])} ± {format_value(row['std'])}"
+    report_utils.long_metrics(
+        metrics, METRIC_COLUMNS, run_id=run_id, model_name=MODEL_NAME,
+    ).to_csv(run_dir / "metrics.csv", index=False, encoding="utf-8-sig")
+    metrics.to_csv(run_dir / "fold_metrics.csv", index=False, encoding="utf-8-sig")
+    summary.to_csv(run_dir / "metrics_summary.csv", index=False, encoding="utf-8-sig")
+    coefficients.to_csv(run_dir / "coefficients.csv", index=False, encoding="utf-8-sig")
+    predictions_frame.to_csv(run_dir / "predictions.csv", index=False, encoding="utf-8-sig")
+    diagnostics.to_csv(run_dir / "residual_diagnostics.csv", index=False, encoding="utf-8-sig")
 
-    best_fold = metrics.loc[metrics["r2"].idxmax()]
-    worst_fold = metrics.loc[metrics["r2"].idxmin()]
+    best_fold = metrics.loc[metrics["r2_rub"].idxmax()]
+    worst_fold = metrics.loc[metrics["r2_rub"].idxmin()]
     intercept = float(coefficients.loc[coefficients["term"].eq("intercept"), "coefficient"].iloc[0])
-    cheapest = diagnostics.iloc[0]
-    dearest = diagnostics.iloc[-1]
-    error_gap = dearest["mean_abs_error_rub"] / cheapest["mean_abs_error_rub"]
-    report = [
-        "# Линейная регрессия цены: 2 признака",
-        "",
-        f"Данные: `{input_path}`",
-        f"Признаки: **{', '.join(x.columns)}**; целевая переменная: **{TARGET_COLUMN}**.",
-        f"Модель: `LinearRegression` (МНК, свободный член обучается); строк: **{len(x):,}**.",
-        f"Валидация: `KFold(n_splits={folds}, shuffle=True, random_state={seed})`.",
-        f"Метрики считаются out-of-fold, в рублях; MAPE — в процентах.",
-        "",
-        "## Метрики (среднее ± стандартное отклонение по фолдам)",
-        "",
-        f"- R²: **{metric_summary('r2')}**",
-        f"- RMSE: **{metric_summary('rmse_rub')}** ₽",
-        f"- MAE: **{metric_summary('mae_rub')}** ₽",
-        f"- Медианная абсолютная ошибка: **{metric_summary('median_ae_rub')}** ₽",
-        f"- MAPE: **{metric_summary('mape_pct')}** %",
-        "",
-        f"Лучший фолд: №{int(best_fold['fold'])} (R² = {format_value(best_fold['r2'])}); "
-        f"худший: №{int(worst_fold['fold'])} (R² = {format_value(worst_fold['r2'])}).",
-        "",
-        "## Метрики по фолдам",
-        markdown_table(metrics[["fold", "train_size", "test_size", *METRIC_COLUMNS]].rename(
-            columns={
-                "fold": "Фолд", "train_size": "Обучение", "test_size": "Тест",
-                "r2": "R²", "rmse_rub": "RMSE, ₽", "mae_rub": "MAE, ₽",
-                "median_ae_rub": "MedAE, ₽", "mape_pct": "MAPE, %",
-            }
-        )),
-        "",
-        "## Сравнение с базовой моделью",
-        f"Базовая модель предсказывает среднее по обучающей части фолда: "
-        f"RMSE **{format_value(baseline['rmse_rub'])}** ₽, MAE "
-        f"**{format_value(baseline['mae_rub'])}** ₽, R² ~ 0 по построению.",
-        f"Регрессия снижает RMSE относительно базовой модели на "
-        f"**{(1 - summary_by_metric.loc['rmse_rub', 'mean'] / baseline['rmse_rub']) * 100:.1f} %**.",
-        "",
-        "## Коэффициенты (обучение на всех данных)",
-        markdown_table(coefficients.rename(columns={
-            "term": "Термин", "coefficient": "Коэффициент", "unit": "Единица",
-            "mean_feature": "Среднее признака",
-            "typical_contribution_rub": "Вклад при среднем, ₽",
-            "fold_coef_std": "Разброс по фолдам",
-        })),
-        f"Свободный член отрицательный (**{format_value(intercept)}** ₽): при малых площадях "
-        "модель формально даёт отрицательную цену. Это признак того, что линейная форма "
-        "плохо описывает нижний край рынка, а не экономический факт.",
-        "",
-        "## Диагностика остатков",
-        "Средняя абсолютная ошибка и смещение прогноза по квартилям прогноза:",
-        markdown_table(diagnostics.rename(columns={
-            "prediction_group": "Квартиль прогноза",
-            "count": "Строк",
-            "mean_predicted_rub": "Средний прогноз, ₽",
-            "mean_actual_rub": "Средний факт, ₽",
-            "mean_residual_rub": "Среднее смещение, ₽",
-            "mean_abs_error_rub": "Средняя |ошибка|, ₽",
-        })),
-        f"Средняя абсолютная ошибка растёт от нижнего квартиля прогноза "
-        f"(**{format_value(cheapest['mean_abs_error_rub'])}** ₽) к верхнему "
-        f"(**{format_value(dearest['mean_abs_error_rub'])}** ₽) — в "
-        f"**{error_gap:.1f}** раза: модель заметно хуже на дорогих объектах.",
-        f"Смещение (`факт − прогноз`) меняет знак: в нижнем квартиле "
-        f"**{format_value(cheapest['mean_residual_rub'])}** ₽, в верхнем — "
-        f"**{format_value(dearest['mean_residual_rub'])}** ₽. То есть модель занижает "
-        "дешёвые объекты и завышает дорогие: прогноз сжимается к среднему, потому что "
-        "два признака не разделяют дорогие сегменты, а квадратичная функция потерь "
-        "тянет подгонку к крупным ценам.",
-        "",
-        "## Файлы",
-        f"- Метрики по фолдам: `{output_dir / 'cv_metrics.csv'}`",
-        f"- Сводка метрик: `{output_dir / 'cv_summary.csv'}`",
-        f"- Коэффициенты: `{output_dir / 'coefficients.csv'}`",
-        f"- Прогнозы out-of-fold: `{output_dir / 'predictions.csv'}`",
-        f"- Диагностика остатков: `{output_dir / 'residual_diagnostics.csv'}`",
-        *[f"- График: `{path}`" for path in charts],
-        "",
-        "## Ограничения",
+    low_bias = float(diagnostics.iloc[0]["mean_residual_rub"])
+    high_bias = float(diagnostics.iloc[-1]["mean_residual_rub"])
+
+    body = report_utils.build_body(
+        [
+            f"Модель: `LinearRegression` (МНК, свободный член обучается); "
+            f"признаки: **{', '.join(x.columns)}**.",
+        ],
+        report_utils.metrics_section(summary, METRIC_COLUMNS),
+        [
+            f"Лучший фолд: №{int(best_fold['fold'])} "
+            f"(R² = {report_utils.format_value(best_fold['r2_rub'])}); "
+            f"худший: №{int(worst_fold['fold'])} "
+            f"(R² = {report_utils.format_value(worst_fold['r2_rub'])}).",
+        ],
+        report_utils.per_fold_section(
+            metrics, ["fold", "train_size", "test_size", *METRIC_COLUMNS],
+        ),
+        report_utils.baseline_section(
+            baseline_rmse=baseline["rmse_rub"],
+            model_rmse=summary_by_metric.loc["rmse_rub", "mean"],
+            model_label="Регрессия",
+            note="Базовая модель предсказывает среднее по обучающей части фолда "
+                 "(R² ~ 0 по построению):",
+        ),
+        [
+            "## Коэффициенты (обучение на всех данных)",
+            report_utils.markdown_table(coefficients.rename(columns={
+                "term": "Термин", "coefficient": "Коэффициент", "unit": "Единица",
+                "mean_feature": "Среднее признака",
+                "typical_contribution_rub": "Вклад при среднем, ₽",
+                "fold_coef_std": "Разброс по фолдам",
+            })),
+            f"Свободный член отрицательный "
+            f"(**{report_utils.format_value(intercept)}** ₽): при малых площадях модель "
+            "формально даёт отрицательную цену. Это признак того, что линейная форма плохо "
+            "описывает нижний край рынка, а не экономический факт.",
+        ],
+        report_utils.residual_section(
+            diagnostics,
+            bias_text=(
+                "Смещение (`факт − прогноз`) меняет знак: в нижнем квартиле "
+                f"**{report_utils.format_value(low_bias)}** ₽, в верхнем — "
+                f"**{report_utils.format_value(high_bias)}** ₽. То есть модель занижает "
+                "дешёвые объекты и завышает дорогие: прогноз сжимается к среднему, потому "
+                "что два признака не разделяют дорогие сегменты, а квадратичная функция "
+                "потерь тянет подгонку к крупным ценам."
+            ),
+            growth_suffix=": модель заметно хуже на дорогих объектах",
+        ),
+    )
+    limitations = [
         "- `asking_price_rub` — цена предложения, а не подтверждённая цена сделки.",
         "- Только два признака: локация, материалы, транспорт и состояние не учтены,",
         "  поэтому часть дисперсии цены объяснить нечем и она уходит в остаток.",
@@ -412,15 +275,45 @@ def run(input_path: Path, output_dir: Path, folds: int, seed: int) -> None:
         "- Корреляция не означает причинность: коэффициенты описывают связь в этих данных,",
         "  а не прирост цены при надстройке этажа.",
     ]
-    (output_dir / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
 
-    print(f"Строк: {len(x):,}; признаков: {len(x.columns)}; фолдов: {folds}".replace(",", " "))
-    print(f"R² (CV): {summary_by_metric.loc['r2', 'mean']:.3f} "
-          f"± {summary_by_metric.loc['r2', 'std']:.3f}")
+    artifacts = [
+        "report.md", "metrics.csv", "fold_metrics.csv", "metrics_summary.csv",
+        "coefficients.csv", "predictions.csv", "residual_diagnostics.csv",
+        *[f"figures/{path.name}" for path in charts],
+    ]
+    manifest = report_utils.build_manifest(
+        run_id=run_id,
+        script=Path(__file__).name,
+        model=MODEL_NAME,
+        input_path=input_path,
+        rows=len(x),
+        features=len(x.columns),
+        target=TARGET_COLUMN,
+        cv_scheme="kfold",
+        folds=args.folds,
+        seed=args.seed,
+        params=report_utils.cli_params(args),
+        artifacts=artifacts,
+        primary_value=float(summary_by_metric.loc[report_utils.PRIMARY_METRIC, "mean"]),
+    )
+    (run_dir / "report.md").write_text(
+        report_utils.render_report(
+            title="Линейная регрессия цены: 2 признака",
+            manifest=manifest, body=body, limitations=limitations,
+        ),
+        encoding="utf-8",
+    )
+    index_path = report_utils.finish_run(experiments_dir, run_dir, manifest)
+
+    print(f"Строк: {len(x):,}; признаков: {len(x.columns)}; фолдов: {args.folds}".replace(",", " "))
+    # Консоль Windows — cp1251: печатаем только ASCII, иначе UnicodeEncodeError при
+    # перенаправлении вывода. «R²» и «±» остаются в отчёте (UTF-8), но не в stdout.
+    print(f"R2 (CV): {summary_by_metric.loc['r2_rub', 'mean']:.3f} "
+          f"+- {summary_by_metric.loc['r2_rub', 'std']:.3f}")
     print(f"RMSE (CV): {summary_by_metric.loc['rmse_rub', 'mean']:,.0f} руб.".replace(",", " "))
     print(f"MAE (CV): {summary_by_metric.loc['mae_rub', 'mean']:,.0f} руб.".replace(",", " "))
     print(f"Базовая модель RMSE: {baseline['rmse_rub']:,.0f} руб.".replace(",", " "))
-    print(f"Отчёты и графики: {output_dir}")
+    print(f"Эксперимент: {run_dir}; реестр: {index_path}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -432,8 +325,8 @@ def parse_args() -> argparse.Namespace:
         help="Таблица признаков (по умолчанию data/features/features.csv).",
     )
     parser.add_argument(
-        "--output-dir", type=Path, default=default_report_dir(),
-        help="Каталог для отчёта, метрик и figures/ (по умолчанию reports/lin_reg_2f).",
+        "--experiments-dir", type=Path, default=report_utils.default_experiments_dir(__file__),
+        help="Корень экспериментов; запуск получит следующий номер (по умолчанию experiments/).",
     )
     parser.add_argument("--folds", type=int, default=5, help="Число фолдов кросс-валидации (по умолчанию 5).")
     parser.add_argument("--seed", type=int, default=42, help="Случайное зерно перемешивания фолдов.")
@@ -447,7 +340,7 @@ def main() -> None:
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s: %(message)s",
     )
-    run(args.input.expanduser(), args.output_dir.expanduser(), args.folds, args.seed)
+    run(args)
 
 
 if __name__ == "__main__":

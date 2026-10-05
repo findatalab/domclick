@@ -17,7 +17,9 @@ Why this is not a copy of the linear-regression script
 2. The target is modelled on the log scale (price skew ≈ 9.8) and back-transformed
    with expm1 for the ruble-scale metrics, with a clip guard against extrapolation.
 3. Grouped CV keeps near-duplicate listings of one locality out of the test set.
-4. Results go to reports/histgb/, never into another model's report directory.
+4. Results follow the shared experiment contract: a numbered directory under
+   `experiments/` with `meta.json`, `report.md` and canonical metric tables; the report
+   plumbing lives in `report_utils.py` (see docs/experiment_contract.md).
 """
 
 from __future__ import annotations
@@ -27,11 +29,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import matplotlib
-
-matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyRegressor
@@ -46,8 +43,11 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import GroupKFold, KFold, ParameterSampler
 
+import report_utils
+
 
 LOG = logging.getLogger("domclick.histgb")
+MODEL_NAME = "histgb"
 IDENTIFIER_COLUMN = "listing_id"
 TARGET_COLUMN = "asking_price_rub"
 LOG_TARGET_COLUMN = "log_asking_price_rub"
@@ -70,11 +70,6 @@ PARAM_DISTRIBUTIONS = {
 def default_input_path() -> Path:
     """Where build_reach_features.py writes the modeling matrix."""
     return Path(__file__).resolve().parent / "data" / "features" / "features_rich.csv"
-
-
-def default_report_dir() -> Path:
-    """Reports go to reports/, in a directory named after this model."""
-    return Path(__file__).resolve().parent / "reports" / "histgb"
 
 
 def load_data(path: Path) -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series, list[str]]:
@@ -276,120 +271,12 @@ def cross_validate(x: pd.DataFrame, y: pd.Series, groups: pd.Series, args: argpa
     return metrics, predictions, baseline_predictions, importance, tuning_table
 
 
-def summary_table(metrics: pd.DataFrame) -> pd.DataFrame:
-    """Mean/std/min/max per metric across folds."""
-    rows: list[dict[str, Any]] = []
-    for metric in METRIC_COLUMNS:
-        values = metrics[metric]
-        rows.append({
-            "metric": metric,
-            "mean": values.mean(),
-            "std": values.std(),
-            "min": values.min(),
-            "max": values.max(),
-        })
-    return pd.DataFrame(rows)
-
-
-def residual_diagnostics(predictions: pd.DataFrame, quartiles: int = 4) -> pd.DataFrame:
-    """Error and bias by prediction quartile, to expose heteroscedasticity."""
-    frame = predictions.copy()
-    frame["prediction_group"] = pd.qcut(
-        frame["predicted_rub"], quartiles,
-        labels=[f"Q{index}" for index in range(1, quartiles + 1)],
-    )
-    return (
-        frame.groupby("prediction_group", observed=True)
-        .agg(
-            count=("actual_rub", "size"),
-            mean_predicted_rub=("predicted_rub", "mean"),
-            mean_actual_rub=("actual_rub", "mean"),
-            mean_residual_rub=("residual_rub", "mean"),
-            mean_abs_error_rub=("abs_error_rub", "mean"),
-        )
-        .reset_index()
-    )
-
-
-def save_figures(predictions: pd.DataFrame, figure_dir: Path) -> list[Path]:
-    """Out-of-fold diagnostics: predicted vs actual and residuals."""
-    figure_dir.mkdir(parents=True, exist_ok=True)
-    plt.rcParams.update({
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "DejaVu Sans"],
-        "axes.unicode_minus": False,
-        "figure.dpi": 120,
-    })
-    actual = predictions["actual_rub"].to_numpy(dtype=float)
-    predicted = predictions["predicted_rub"].to_numpy(dtype=float)
-    outputs: list[Path] = []
-
-    # Values and axis limits must share one unit; mixing rubles with millions clips
-    # every point and leaves an empty-looking chart.
-    limit = float(np.quantile(np.concatenate([actual, predicted]), 0.99)) / 1e6
-    fig, ax = plt.subplots(figsize=(9, 7))
-    ax.scatter(actual / 1e6, predicted / 1e6, alpha=0.4, s=18,
-               color="#2563eb", edgecolors="none")
-    ax.plot([0, limit], [0, limit], color="#dc2626", linewidth=1.4,
-            label="идеальное совпадение")
-    ax.set(title="Факт и прогноз цены, HistGB (out-of-fold)", xlabel="Факт, млн руб.",
-           ylabel="Прогноз, млн руб.", xlim=(0, limit), ylim=(0, limit))
-    ax.legend()
-    ax.grid(alpha=0.25)
-    fig.tight_layout()
-    path = figure_dir / "actual_vs_predicted.png"
-    fig.savefig(path, dpi=180)
-    plt.close(fig)
-    outputs.append(path)
-
-    residuals = (actual - predicted) / 1e6
-    cap = float(np.quantile(np.abs(residuals), 0.99))
-    predicted_mln = predicted / 1e6
-    x_cap = float(np.quantile(predicted_mln, 0.99))
-    fig, ax = plt.subplots(figsize=(9, 6))
-    ax.scatter(predicted_mln, residuals, alpha=0.4, s=18,
-               color="#7c3aed", edgecolors="none")
-    ax.axhline(0, color="#dc2626", linewidth=1.4)
-    ax.set(title="Остатки HistGB (out-of-fold)", xlabel="Прогноз, млн руб.",
-           ylabel="Остаток, млн руб.",
-           xlim=(min(predicted_mln.min(), 0), x_cap), ylim=(-cap, cap))
-    ax.grid(alpha=0.25)
-    fig.tight_layout()
-    path = figure_dir / "residuals.png"
-    fig.savefig(path, dpi=180)
-    plt.close(fig)
-    outputs.append(path)
-    return outputs
-
-
-def format_value(value: Any) -> str:
-    """Readable value: integers as is, floats with spaces as separators."""
-    if value is None or (not isinstance(value, str) and pd.isna(value)):
-        return "—"
-    if isinstance(value, str):
-        return value
-    if isinstance(value, (int, np.integer)):
-        return f"{value:,}".replace(",", " ")
-    if abs(float(value)) >= 1000:
-        return f"{float(value):,.0f}".replace(",", " ").replace("-", "−")
-    return f"{float(value):.4f}".replace(".", ",")
-
-
-def markdown_table(frame: pd.DataFrame) -> str:
-    """Build a small Markdown table without relying on the optional tabulate package."""
-    if frame.empty:
-        return "_Нет данных._"
-    headers = [str(name) for name in frame.columns]
-    lines = ["| " + " | ".join(headers) + " |",
-             "| " + " | ".join("---" for _ in headers) + " |"]
-    for row in frame.itertuples(index=False, name=None):
-        lines.append("| " + " | ".join(format_value(value) for value in row) + " |")
-    return "\n".join(lines)
-
-
 def run(args: argparse.Namespace) -> None:
+    report_utils.ensure_metrics(METRIC_COLUMNS)
+    experiments_dir = args.experiments_dir.expanduser()
+    run_id, run_dir = report_utils.create_run_dir(experiments_dir)
+    LOG.info("Каталог запуска: %s", run_dir)
     input_path: Path = args.input
-    output_dir: Path = args.output_dir
     x, y, groups, identifiers, feature_columns = load_data(input_path)
 
     if args.cv == "group" and groups.nunique() < args.folds:
@@ -401,7 +288,7 @@ def run(args: argparse.Namespace) -> None:
         raise SystemExit(f"Строк ({len(x)}) меньше числа фолдов ({args.folds}).")
 
     metrics, predictions, baseline, importance, tuning = cross_validate(x, y, groups, args)
-    summary = summary_table(metrics)
+    summary = report_utils.metric_summary(metrics, METRIC_COLUMNS)
     summary_by_metric = summary.set_index("metric")
 
     # Out-of-fold rows only; a listing scored twice would distort the diagnostics.
@@ -415,51 +302,23 @@ def run(args: argparse.Namespace) -> None:
     oof["abs_error_rub"] = oof["residual_rub"].abs()
     oof["predicted_log"] = np.log(np.clip(oof["predicted_rub"], 1e3, None))
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    metrics.to_csv(output_dir / "cv_metrics.csv", index=False, encoding="utf-8-sig")
-    summary.to_csv(output_dir / "cv_summary.csv", index=False, encoding="utf-8-sig")
-    oof.to_csv(output_dir / "predictions.csv", index=False, encoding="utf-8-sig")
-    diagnostics = residual_diagnostics(oof)
-    diagnostics.to_csv(output_dir / "residual_diagnostics.csv", index=False, encoding="utf-8-sig")
+    diagnostics = report_utils.residual_diagnostics(oof)
+    charts = report_utils.save_figures(oof, run_dir / "figures", title_prefix="HistGB")
+    report_utils.long_metrics(
+        metrics, METRIC_COLUMNS, run_id=run_id, model_name=MODEL_NAME,
+    ).to_csv(run_dir / "metrics.csv", index=False, encoding="utf-8-sig")
+    metrics.to_csv(run_dir / "fold_metrics.csv", index=False, encoding="utf-8-sig")
+    summary.to_csv(run_dir / "metrics_summary.csv", index=False, encoding="utf-8-sig")
+    oof.to_csv(run_dir / "predictions.csv", index=False, encoding="utf-8-sig")
+    diagnostics.to_csv(run_dir / "residual_diagnostics.csv", index=False, encoding="utf-8-sig")
     if not importance.empty:
-        importance.to_csv(output_dir / "feature_importance.csv", index=False, encoding="utf-8-sig")
+        importance.to_csv(run_dir / "feature_importance.csv", index=False, encoding="utf-8-sig")
     if not tuning.empty:
-        tuning.to_csv(output_dir / "tuning.csv", index=False, encoding="utf-8-sig")
-    charts = save_figures(oof, output_dir / "figures")
-
-    def metric_summary(name: str) -> str:
-        row = summary_by_metric.loc[name]
-        return f"{format_value(row['mean'])} ± {format_value(row['std'])}"
+        tuning.to_csv(run_dir / "tuning.csv", index=False, encoding="utf-8-sig")
 
     best_fold = metrics.loc[metrics["r2_rub"].idxmax()]
     worst_fold = metrics.loc[metrics["r2_rub"].idxmin()]
-    cheapest, dearest = diagnostics.iloc[0], diagnostics.iloc[-1]
-    error_gap = dearest["mean_abs_error_rub"] / cheapest["mean_abs_error_rub"]
-    low_bias = float(cheapest["mean_residual_rub"])
-    high_bias = float(dearest["mean_residual_rub"])
-    # Describe the bias pattern from the numbers instead of asserting a sign flip:
-    # depending on the target scale and clipping the model may be biased in one direction.
-    if low_bias * high_bias < 0:
-        bias_sentence = (
-            f"Смещение (`факт − прогноз`) меняет знак: **{format_value(low_bias)}** ₽ в нижнем "
-            f"квартиле против **{format_value(high_bias)}** ₽ в верхнем, то есть модель "
-            "переоценивает один конец рынка и недооценивает другой."
-        )
-    elif low_bias >= 0 and high_bias >= 0:
-        bias_sentence = (
-            f"Смещение (`факт − прогноз`) остаётся положительным во всех квартилях: "
-            f"**{format_value(low_bias)}** ₽ в нижнем против **{format_value(high_bias)}** ₽ "
-            "в верхнем. Модель систематически занижает цену, и сильнее всего — "
-            "в дорогом сегменте."
-        )
-    else:
-        bias_sentence = (
-            f"Смещение (`факт − прогноз`) остаётся отрицательным во всех квартилях: "
-            f"**{format_value(low_bias)}** ₽ в нижнем против **{format_value(high_bias)}** ₽ "
-            "в верхнем. Модель систематически завышает цену."
-        )
     baseline_rmse = root_mean_squared_error(oof["actual_rub"], oof["baseline_rub"])
-    improvement = (1 - summary_by_metric.loc["rmse_rub", "mean"] / baseline_rmse) * 100
     nan_cells = int(x.isna().sum().sum())
     rows_with_nan = int(x.isna().any(axis=1).sum())
     if args.cv == "group":
@@ -476,106 +335,53 @@ def run(args: argparse.Namespace) -> None:
             "Для честной оценки используйте `--cv group`."
         )
 
-    report = [
-        "# HistGradientBoosting: модель цены предложения",
-        "",
-        f"Данные: `{input_path}`",
-        f"Модель: `HistGradientBoostingRegressor` с early stopping "
-        f"(`max_iter={args.max_iter}`, `n_iter_no_change=20`, `validation_fraction=0.1`).",
-        f"Признаков: **{len(feature_columns)}**; строк: **{len(x):,}**; "
-        f"пропусков в матрице: **{nan_cells:,}**.",
-        f"Цель: `log({TARGET_COLUMN})`; метрики пересчитаны в рубли через `expm1`.",
-        f"Валидация: {'GroupKFold по `' + GROUP_COLUMN + '`' if args.cv == 'group' else 'KFold'} "
-        f"({args.folds} фолдов, групп: {groups.nunique():,}, seed {args.seed}).",
-        f"Подбор гиперпараметров: "
-        f"{'внутренний перебор на ' + str(args.tune) + ' кандидатах' if args.tune else 'не выполнялся'}.",
-        "",
-        "## Метрики (среднее ± стандартное отклонение по фолдам)",
-        "",
-        f"- R² на лог-шкале: **{metric_summary('r2_log')}**",
-        f"- R² в рублях: **{metric_summary('r2_rub')}**",
-        f"- RMSE: **{metric_summary('rmse_rub')} ₽**",
-        f"- MAE: **{metric_summary('mae_rub')} ₽**",
-        f"- Медианная абсолютная ошибка: **{metric_summary('median_ae_rub')} ₽**",
-        f"- MAPE: **{metric_summary('mape_pct')} %**",
-        "",
-        f"Лучший фолд: №{int(best_fold['fold'])} (R² в рублях = {format_value(best_fold['r2_rub'])}); "
-        f"худший: №{int(worst_fold['fold'])} (R² в рублях = {format_value(worst_fold['r2_rub'])}).",
-        "",
-        "## Метрики по фолдам",
-        markdown_table(metrics[["fold", "train_size", "test_size", "n_iter", "clipped",
-                                "r2_log", "r2_rub", "rmse_rub", "mae_rub", "median_ae_rub",
-                                "mape_pct"]].rename(columns={
-            "fold": "Фолд", "train_size": "Обучение", "test_size": "Тест",
-            "n_iter": "Итераций", "clipped": "Обрезано прогнозов",
-            "r2_log": "R² (лог)", "r2_rub": "R² (руб.)", "rmse_rub": "RMSE, ₽",
-            "mae_rub": "MAE, ₽", "median_ae_rub": "MedAE, ₽", "mape_pct": "MAPE, %",
-        })),
-        "",
-        "## Сравнение с базовой моделью",
-        f"Базовая модель предсказывает среднее по обучающей части фолда "
-        f"(обратное преобразование лога — геометрическое среднее): "
-        f"RMSE **{format_value(baseline_rmse)}** ₽.",
-        f"HistGB снижает RMSE относительно базовой модели на **{improvement:.1f} %**.",
-        "",
-    ]
-
-    if not importance.empty:
-        report += [
-            "## Важность признаков",
-            "Permutation importance, посчитанная на тестовых фолдах "
-            "(то есть без утечки из обучения). Падение R² на лог-шкале:",
-            markdown_table(importance.head(15).rename(columns={
-                "feature": "Признак", "importance_mean_r2_log": "Падение R²",
-            })),
-            "",
-        ]
-
-    if not tuning.empty:
-        best_rows = tuning.sort_values("rmse_log_mean").groupby("fold").head(1)
-        report += [
-            "## Подбор гиперпараметров",
-            "Поиск выполняется на внутренней групповой разбивке обучающей части фолда, "
-            "тестовый фолд в подборе не участвует. Лучший кандидат каждого фолда:",
-            markdown_table(best_rows[[
-                "fold", "rmse_log_mean", "learning_rate", "max_leaf_nodes",
-                "min_samples_leaf", "l2_regularization",
-            ]].rename(columns={
-                "fold": "Фолд", "rmse_log_mean": "RMSE (лог)",
-                "learning_rate": "learning_rate", "max_leaf_nodes": "max_leaf_nodes",
-                "min_samples_leaf": "min_samples_leaf",
-                "l2_regularization": "l2_regularization",
-            })),
-            "",
-        ]
-
-    report += [
-        "## Диагностика остатков",
-        "Средняя абсолютная ошибка и смещение по квартилям прогноза:",
-        markdown_table(diagnostics.rename(columns={
-            "prediction_group": "Квартиль прогноза",
-            "count": "Строк",
-            "mean_predicted_rub": "Средний прогноз, ₽",
-            "mean_actual_rub": "Средний факт, ₽",
-            "mean_residual_rub": "Среднее смещение, ₽",
-            "mean_abs_error_rub": "Средняя абс. ошибка, ₽",
-        })),
-        f"Средняя абсолютная ошибка растёт от нижнего квартиля прогноза "
-        f"(**{format_value(cheapest['mean_abs_error_rub'])}** ₽) к верхнему "
-        f"(**{format_value(dearest['mean_abs_error_rub'])}** ₽) — в **{error_gap:.1f}** раза.",
-        bias_sentence,
-        "Остаточная гетероскедастичность ожидаема: дорогие объекты разнороднее, "
-        "а обучающих примеров в верхнем сегменте мало.",
-        "",
-        "## Обработка пропусков",
-        "Пропуски **не заполняются**: `HistGradientBoostingRegressor` сам направляет "
-        "объекты с NaN в отдельную ветвь. Это принципиально, потому что в матрице "
-        f"**{nan_cells:,}** пропущенных ячеек, и хотя бы один пропуск есть в "
-        f"**{rows_with_nan:,}** из **{len(x):,}** строк "
-        f"({rows_with_nan / len(x) * 100:.1f} %). Построчное удаление пропусков "
-        f"оставило бы **{len(x) - rows_with_nan:,}** строк — HistGB сохраняет все данные.",
-        "",
-        "## Ограничения",
+    body = report_utils.build_body(
+        [
+            f"Модель: `HistGradientBoostingRegressor` с early stopping "
+            f"(`max_iter={args.max_iter}`, `n_iter_no_change=20`, `validation_fraction=0.1`); "
+            f"признаков: **{len(feature_columns)}**; пропусков в матрице: **{nan_cells:,}**.",
+            f"Цель: `log({TARGET_COLUMN})`; метрики пересчитаны в рубли через `expm1`; "
+            f"групп в валидации: {groups.nunique():,}.",
+            f"Подбор гиперпараметров: "
+            f"{'внутренний перебор на ' + str(args.tune) + ' кандидатах' if args.tune else 'не выполнялся'}.",
+        ],
+        report_utils.metrics_section(summary, METRIC_COLUMNS),
+        [
+            f"Лучший фолд: №{int(best_fold['fold'])} "
+            f"(R² в рублях = {report_utils.format_value(best_fold['r2_rub'])}); "
+            f"худший: №{int(worst_fold['fold'])} "
+            f"(R² в рублях = {report_utils.format_value(worst_fold['r2_rub'])}).",
+        ],
+        report_utils.per_fold_section(
+            metrics, ["fold", "train_size", "test_size", "n_iter", "clipped", *METRIC_COLUMNS],
+        ),
+        report_utils.baseline_section(
+            baseline_rmse=baseline_rmse,
+            model_rmse=summary_by_metric.loc["rmse_rub", "mean"],
+            model_label="HistGB",
+            note="Базовая модель предсказывает среднее по обучающей части фолда "
+                 "(обратное преобразование лога — геометрическое среднее):",
+        ),
+        report_utils.importance_section(importance),
+        report_utils.tuning_section(
+            tuning, ["fold", "rmse_log_mean", "learning_rate", "max_leaf_nodes",
+                     "min_samples_leaf", "l2_regularization"],
+        ),
+        report_utils.residual_section(
+            diagnostics,
+            conclusion="Остаточная гетероскедастичность ожидаема: дорогие объекты "
+                       "разнороднее, а обучающих примеров в верхнем сегменте мало.",
+        ),
+        report_utils.text_section("Обработка пропусков", [
+            "Пропуски **не заполняются**: `HistGradientBoostingRegressor` сам направляет "
+            "объекты с NaN в отдельную ветвь. Это принципиально, потому что в матрице "
+            f"**{nan_cells:,}** пропущенных ячеек, и хотя бы один пропуск есть в "
+            f"**{rows_with_nan:,}** из **{len(x):,}** строк "
+            f"({rows_with_nan / len(x) * 100:.1f} %). Построчное удаление пропусков "
+            f"оставило бы **{len(x) - rows_with_nan:,}** строк — HistGB сохраняет все данные.",
+        ]),
+    )
+    limitations = [
         "- `asking_price_rub` — цена предложения, а не подтверждённая цена сделки.",
         cv_note,
         "- Целевая переменная скошена (skew ≈ 9,8): RMSE сильно зависит от нескольких "
@@ -588,18 +394,29 @@ def run(args: argparse.Namespace) -> None:
         "поэтому модель не выдаёт цены за пределами наблюдённого диапазона.",
         "- Модель не экстраполирует: для объектов вне обучающего распределения "
         "(другой регион, другой тип недвижимости) прогноз не обоснован.",
-        "",
-        "## Файлы",
-        f"- Метрики по фолдам: `{output_dir / 'cv_metrics.csv'}`",
-        f"- Сводка метрик: `{output_dir / 'cv_summary.csv'}`",
-        f"- Прогнозы out-of-fold: `{output_dir / 'predictions.csv'}`",
-        f"- Диагностика остатков: `{output_dir / 'residual_diagnostics.csv'}`",
-        *([f"- Важность признаков: `{output_dir / 'feature_importance.csv'}`"]
-          if not importance.empty else []),
-        *([f"- Результаты подбора: `{output_dir / 'tuning.csv'}`"] if not tuning.empty else []),
-        *[f"- График: `{path}`" for path in charts],
     ]
-    (output_dir / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    artifacts = [
+        "report.md", "metrics.csv", "fold_metrics.csv", "metrics_summary.csv",
+        "predictions.csv", "residual_diagnostics.csv",
+        *(["feature_importance.csv"] if not importance.empty else []),
+        *(["tuning.csv"] if not tuning.empty else []),
+        *[f"figures/{path.name}" for path in charts],
+    ]
+    manifest = report_utils.build_manifest(
+        run_id=run_id, script=Path(__file__).name, model=MODEL_NAME, input_path=input_path,
+        rows=len(x), features=len(feature_columns), target=TARGET_COLUMN,
+        group_column=GROUP_COLUMN, cv_scheme=args.cv, folds=args.folds, seed=args.seed,
+        params=report_utils.cli_params(args), artifacts=artifacts,
+        primary_value=float(summary_by_metric.loc[report_utils.PRIMARY_METRIC, "mean"]),
+    )
+    (run_dir / "report.md").write_text(
+        report_utils.render_report(
+            title="HistGradientBoosting: модель цены предложения",
+            manifest=manifest, body=body, limitations=limitations,
+        ),
+        encoding="utf-8",
+    )
+    index_path = report_utils.finish_run(experiments_dir, run_dir, manifest)
 
     print(f"Rows: {len(x):,}; features: {len(feature_columns)}; folds: {args.folds}".replace(",", " "))
     print(f"R2 (rub): {summary_by_metric.loc['r2_rub', 'mean']:.3f} "
@@ -608,7 +425,7 @@ def run(args: argparse.Namespace) -> None:
     print(f"RMSE (rub): {summary_by_metric.loc['rmse_rub', 'mean']:,.0f}".replace(",", " "))
     print(f"MAE (rub): {summary_by_metric.loc['mae_rub', 'mean']:,.0f}".replace(",", " "))
     print(f"Baseline RMSE (rub): {baseline_rmse:,.0f}".replace(",", " "))
-    print(f"Reports: {output_dir}")
+    print(f"Эксперимент: {run_dir}; реестр: {index_path}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -620,8 +437,8 @@ def parse_args() -> argparse.Namespace:
         help="Матрица признаков (по умолчанию data/features/features_rich.csv).",
     )
     parser.add_argument(
-        "--output-dir", type=Path, default=default_report_dir(),
-        help="Каталог для отчёта и метрик (по умолчанию reports/histgb).",
+        "--experiments-dir", type=Path, default=report_utils.default_experiments_dir(__file__),
+        help="Корень экспериментов; запуск получит следующий номер (по умолчанию experiments/).",
     )
     parser.add_argument(
         "--cv", choices=("group", "kfold"), default="group",
