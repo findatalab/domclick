@@ -1,0 +1,22 @@
+﻿поле,признак,заполнено,пусто,"доля, %"
+land_category,land_category,1144,0,100.0
+permitted_use,permitted_use,0,1144,0.0
+finishing_stage,finishing_stage,1144,0,100.0
+gas_status,gas_status,1144,0,100.0
+wall_material,wall_material,1144,0,100.0
+foundation_type,foundation_type,1144,0,100.0
+heating_type,heating_type,1144,0,100.0
+water_source,water_source,1144,0,100.0
+sewage_type,sewage_type,1144,0,100.0
+bedrooms_count,bedrooms,740,404,64.7
+bathrooms_count,bathrooms,655,489,57.3
+has_attic,attic_present,1144,0,100.0
+has_basement,basement_present,1144,0,100.0
+has_bathhouse,bathhouse_present,1144,0,100.0
+has_garage,garage_present,1144,0,100.0
+has_guesthouse,guest_house_present,1144,0,100.0
+bathhouse_area,bathhouse_area_m2,61,1083,5.3
+garage_area,garage_area_m2,64,1080,5.6
+guesthouse_area,guest_house_area_m2,44,1100,3.8
+construction_year,house_age,309,835,27.0
+house_age,house_age,311,833,27.2

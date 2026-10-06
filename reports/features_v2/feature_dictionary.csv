@@ -1,0 +1,66 @@
+﻿column,group,kind,source_field,note
+house_area_m2,числовой каркас,numeric,objects.jsonl:house_area_m2 | llm:house_area_m2,"площадь дома, м²; пропуски карточки заполнены извлечением из текста"
+distance_to_mkad_km,числовой каркас,numeric,objects.jsonl:distance_to_mkad_km | llm:distance_to_mkad_km,"расстояние до МКАД, км; пустые значения заполнены извлечением"
+highway_00,числовой каркас,one_hot,objects.jsonl:highway | llm:highway,уровень: боровское (63 строк)
+highway_01,числовой каркас,one_hot,objects.jsonl:highway | llm:highway,уровень: варшавское (78 строк)
+highway_02,числовой каркас,one_hot,objects.jsonl:highway | llm:highway,уровень: волоколамское (15 строк)
+highway_03,числовой каркас,one_hot,objects.jsonl:highway | llm:highway,уровень: калужское (389 строк)
+highway_04,числовой каркас,one_hot,objects.jsonl:highway | llm:highway,уровень: киевское (288 строк)
+highway_05,числовой каркас,one_hot,objects.jsonl:highway | llm:highway,уровень: минское (23 строк)
+highway_06,числовой каркас,one_hot,objects.jsonl:highway | llm:highway,уровень: симферопольское (176 строк)
+highway_other,числовой каркас,one_hot,objects.jsonl:highway | llm:highway,"редкие уровни (24 шт., 64 строк)"
+highway_unknown,числовой каркас,one_hot,objects.jsonl:highway | llm:highway,"шоссе не указано ни в карточке, ни в извлечении"
+land_area_sotka,числовой каркас,numeric,objects.jsonl:land_area_sotka | llm:land_area_sotka,"площадь участка, соток; пропуски карточки заполнены извлечением"
+floors,числовой каркас,numeric,objects.jsonl:floors | llm:floors,этажность; пропуски карточки заполнены извлечением
+house_area_per_floor,числовой каркас,derived,house_area_m2 / floors,"средняя площадь этажа, м²; считается после заполнения пропусков"
+land_to_house_ratio,числовой каркас,derived,land_area_sotka / house_area_m2,баланс участка и дома; считается после заполнения пропусков
+land_category_snt,Земля,level,objects.jsonl:land_use_label | llm:land_category | llm:permitted_use,"категория земель и вид разрешённого использования: izhs (ИЖС и земли населённых пунктов) / snt (СНТ и ДНП) / lph / other (сельхоз и прочие редкие категории); источник — метки карточки, затем извлечение; уровень: snt"
+land_category_lph,Земля,level,objects.jsonl:land_use_label | llm:land_category | llm:permitted_use,"категория земель и вид разрешённого использования: izhs (ИЖС и земли населённых пунктов) / snt (СНТ и ДНП) / lph / other (сельхоз и прочие редкие категории); источник — метки карточки, затем извлечение; уровень: lph"
+land_category_izhs,Земля,level,objects.jsonl:land_use_label | llm:land_category | llm:permitted_use,"категория земель и вид разрешённого использования: izhs (ИЖС и земли населённых пунктов) / snt (СНТ и ДНП) / lph / other (сельхоз и прочие редкие категории); источник — метки карточки, затем извлечение; уровень: izhs"
+land_category_other,Земля,level,objects.jsonl:land_use_label | llm:land_category | llm:permitted_use,"категория земель и вид разрешённого использования: izhs (ИЖС и земли населённых пунктов) / snt (СНТ и ДНП) / lph / other (сельхоз и прочие редкие категории); источник — метки карточки, затем извлечение; уровень: other"
+land_category_unknown,Земля,level,objects.jsonl:land_use_label | llm:land_category | llm:permitted_use,"категория земель и вид разрешённого использования: izhs (ИЖС и земли населённых пунктов) / snt (СНТ и ДНП) / lph / other (сельхоз и прочие редкие категории); источник — метки карточки, затем извлечение; уровень: unknown"
+finishing_stage_without_repair,Отделка,level,llm:finishing_stage,"отделка: with_repair (готовая или частичная) / without_repair (без отделки, предчистовая или неизвестно); уровень: without_repair"
+finishing_stage_with_repair,Отделка,level,llm:finishing_stage,"отделка: with_repair (готовая или частичная) / without_repair (без отделки, предчистовая или неизвестно); уровень: with_repair"
+gas_status_po_granice,Газ,level,llm:gas_status,газ: po_granice / podklyuchen / otsutstvuet (нет газа или неизвестно); уровень: po_granice
+gas_status_podklyuchen,Газ,level,llm:gas_status,газ: po_granice / podklyuchen / otsutstvuet (нет газа или неизвестно); уровень: podklyuchen
+gas_status_otsutstvuet,Газ,level,llm:gas_status,газ: po_granice / podklyuchen / otsutstvuet (нет газа или неизвестно); уровень: otsutstvuet
+wall_material_gazobeton,Стены,level,llm:wall_material,"стены: газобетон / пенобетон / кирпич / каркас / брус / бревно / другие; «дерево», керамзитобетон и блоки без уточнения попадают в «другие»; уровень: gazobeton"
+wall_material_penobeton,Стены,level,llm:wall_material,"стены: газобетон / пенобетон / кирпич / каркас / брус / бревно / другие; «дерево», керамзитобетон и блоки без уточнения попадают в «другие»; уровень: penobeton"
+wall_material_kirpich,Стены,level,llm:wall_material,"стены: газобетон / пенобетон / кирпич / каркас / брус / бревно / другие; «дерево», керамзитобетон и блоки без уточнения попадают в «другие»; уровень: kirpich"
+wall_material_karkas,Стены,level,llm:wall_material,"стены: газобетон / пенобетон / кирпич / каркас / брус / бревно / другие; «дерево», керамзитобетон и блоки без уточнения попадают в «другие»; уровень: karkas"
+wall_material_brus,Стены,level,llm:wall_material,"стены: газобетон / пенобетон / кирпич / каркас / брус / бревно / другие; «дерево», керамзитобетон и блоки без уточнения попадают в «другие»; уровень: brus"
+wall_material_brevno,Стены,level,llm:wall_material,"стены: газобетон / пенобетон / кирпич / каркас / брус / бревно / другие; «дерево», керамзитобетон и блоки без уточнения попадают в «другие»; уровень: brevno"
+wall_material_other,Стены,level,llm:wall_material,"стены: газобетон / пенобетон / кирпич / каркас / брус / бревно / другие; «дерево», керамзитобетон и блоки без уточнения попадают в «другие»; уровень: other"
+wall_material_unknown,Стены,level,llm:wall_material,"стены: газобетон / пенобетон / кирпич / каркас / брус / бревно / другие; «дерево», керамзитобетон и блоки без уточнения попадают в «другие»; уровень: unknown"
+foundation_type_svayno_rostverkovyy,Фундамент,level,llm:foundation_type,фундамент: плита / ленточный / сваи / свайно-ростверковый / другой; уровень: svayno_rostverkovyy
+foundation_type_lentochny,Фундамент,level,llm:foundation_type,фундамент: плита / ленточный / сваи / свайно-ростверковый / другой; уровень: lentochny
+foundation_type_plita,Фундамент,level,llm:foundation_type,фундамент: плита / ленточный / сваи / свайно-ростверковый / другой; уровень: plita
+foundation_type_svai,Фундамент,level,llm:foundation_type,фундамент: плита / ленточный / сваи / свайно-ростверковый / другой; уровень: svai
+foundation_type_other,Фундамент,level,llm:foundation_type,фундамент: плита / ленточный / сваи / свайно-ростверковый / другой; уровень: other
+foundation_type_unknown,Фундамент,level,llm:foundation_type,фундамент: плита / ленточный / сваи / свайно-ростверковый / другой; уровень: unknown
+heating_type_gazgolder,Отопление,level,llm:heating_type,отопление: gazovoe (магистральный газ) / gazgolder (газгольдер) / elektricheskoe / pechnoe (печное или твердотопливное) / otsutstvuet (нет отопления или неизвестно); уровень: gazgolder
+heating_type_gazovoe,Отопление,level,llm:heating_type,отопление: gazovoe (магистральный газ) / gazgolder (газгольдер) / elektricheskoe / pechnoe (печное или твердотопливное) / otsutstvuet (нет отопления или неизвестно); уровень: gazovoe
+heating_type_elektricheskoe,Отопление,level,llm:heating_type,отопление: gazovoe (магистральный газ) / gazgolder (газгольдер) / elektricheskoe / pechnoe (печное или твердотопливное) / otsutstvuet (нет отопления или неизвестно); уровень: elektricheskoe
+heating_type_pechnoe,Отопление,level,llm:heating_type,отопление: gazovoe (магистральный газ) / gazgolder (газгольдер) / elektricheskoe / pechnoe (печное или твердотопливное) / otsutstvuet (нет отопления или неизвестно); уровень: pechnoe
+heating_type_otsutstvuet,Отопление,level,llm:heating_type,отопление: gazovoe (магистральный газ) / gazgolder (газгольдер) / elektricheskoe / pechnoe (печное или твердотопливное) / otsutstvuet (нет отопления или неизвестно); уровень: otsutstvuet
+water_source_otsutstvuet,Вода,level,llm:water_source,"вода: centralnoe / skvazhina / kolodec / otsutstvuet (нет воды, привозная или летняя вода, неизвестно); уровень: otsutstvuet"
+water_source_skvazhina,Вода,level,llm:water_source,"вода: centralnoe / skvazhina / kolodec / otsutstvuet (нет воды, привозная или летняя вода, неизвестно); уровень: skvazhina"
+water_source_kolodec,Вода,level,llm:water_source,"вода: centralnoe / skvazhina / kolodec / otsutstvuet (нет воды, привозная или летняя вода, неизвестно); уровень: kolodec"
+water_source_centralnoe,Вода,level,llm:water_source,"вода: centralnoe / skvazhina / kolodec / otsutstvuet (нет воды, привозная или летняя вода, неизвестно); уровень: centralnoe"
+sewage_type_septik,Канализация,level,llm:sewage_type,"канализация: centralnoe / septik (в том числе станции биоочистки) / otsutstvuet (выгребная яма, нет канализации или неизвестно); уровень: septik"
+sewage_type_centralnoe,Канализация,level,llm:sewage_type,"канализация: centralnoe / septik (в том числе станции биоочистки) / otsutstvuet (выгребная яма, нет канализации или неизвестно); уровень: centralnoe"
+sewage_type_otsutstvuet,Канализация,level,llm:sewage_type,"канализация: centralnoe / septik (в том числе станции биоочистки) / otsutstvuet (выгребная яма, нет канализации или неизвестно); уровень: otsutstvuet"
+bedrooms,Планировка,count,llm:bedrooms,число спален
+bathrooms,Планировка,count,llm:bathrooms,число санузлов
+attic_present,Планировка,flag,llm:attic_present,заявлена мансарда
+basement_present,Планировка,flag,llm:basement_present,заявлен подвал или цокольный этаж
+bathhouse_present,Дополнительные строения,flag,llm:bathhouse_present,в извлечении есть баня или сауна (has_bathhouse)
+bathhouse_area_m2,Дополнительные строения,count,llm:bathhouse_area_m2,площадь: баня или сауна
+garage_present,Дополнительные строения,flag,llm:garage_present,в извлечении есть гараж (has_garage)
+garage_area_m2,Дополнительные строения,count,llm:garage_area_m2,площадь: гараж
+guest_house_present,Дополнительные строения,flag,llm:guest_house_present,в извлечении есть гостевой дом (has_guesthouse)
+guest_house_area_m2,Дополнительные строения,count,llm:guest_house_area_m2,площадь: гостевой дом
+house_age,Возраст,derived,llm:house_age,текущий год минус год постройки
+asking_price_rub,target,target,asking_price_rub,"цена предложения, руб. — не цена сделки"
+log_asking_price_rub,target,target,asking_price_rub,логарифм цены: вариант цели для скошенного распределения
+group_locality,bookkeeping,group_key,locality,"ключ для GroupKFold (525 групп), не признак"

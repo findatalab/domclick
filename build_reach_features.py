@@ -89,8 +89,6 @@ BADGE_FLAGS = (
     ("badge_only_domclick", "только на домклик"),
 )
 
-MORTGAGE_DISCOUNT = re.compile(r"скидка на\s*ипотеку до\s*(\d+[.,]?\d*)\s*%")
-
 LOCALITY_TYPES = (
     ("locality_type_snt", r"\bснт\b"),
     ("locality_type_dnp", r"\bднп\b"),
@@ -447,13 +445,6 @@ def build_features(raw: pd.DataFrame, options: argparse.Namespace) -> FeatureBui
     builder.add("badge_count", badges.map(lambda value: float(len(as_list(value)))),
                 "badges", "count", "badges_platform_claimed",
                 "число меток без учёта «Выгодной цены» (она исключена как утечка)")
-    discount = badges.map(lambda value: max(
-        (float(match.replace(",", ".")) for item in as_list(value)
-         for match in MORTGAGE_DISCOUNT.findall(str(item).lower())),
-        default=np.nan,
-    ))
-    builder.add("badge_mortgage_discount_pct", discount, "badges", "numeric",
-                "badges_platform_claimed", "максимальная скидка на ипотеку, % (null если нет)")
 
     # --- one-hot: highway, locality type, settlement type ---------------------
     one_hot(text(raw, "highway"), "highway", builder, "categorical", "highway",
@@ -663,6 +654,12 @@ def run(input_path: Path, features_path: Path, report_dir: Path,
         "(медиана 10,1; 79 % — в самом дешёвом квартиле, 0 % — в самом дорогом). "
         "Платформа вычисляет эту метку из цены, поэтому она является утечкой цели. "
         "Метка исключена и из `badge_count`.",
+        "- признак `badge_mortgage_discount_pct` (градация скидки на ипотеку) "
+        "**не создаётся**: корреляция с ценой 0,82 (Спирмен), разрез по градациям "
+        "немонотонен (медиана 16 млн ₽ при 0,3 %, 57 млн ₽ при 0,8 % и 89 млн ₽ "
+        "при 0,5 %, всего 7 строк). Похоже, градация определяется договором "
+        "продавца, а не свойством дома, то есть это прокси сегмента рынка. "
+        "Признак исключён из набора.",
         "Остальные метки платформы проверены тем же способом и оставлены: их медианный "
         "процентиль цены за м² внутри диапазонов площади 42,9–58,1, то есть связи "
         "с относительной ценой нет.",
@@ -724,17 +721,6 @@ def run(input_path: Path, features_path: Path, report_dir: Path,
         "`house_area_m2` даёт около 0,68 падения R², `distance_to_mkad_km` — 0,078, "
         "`house_area_per_floor` — 0,034, остальные меньше 0,03. Признаки из описания "
         "слабые (лучший `txt_*` — около 0,008), но не бесполезные.",
-        "",
-        "## Подозрительные признаки, требующие проверки",
-        "`badge_mortgage_discount_pct` коррелирует с ценой на уровне 0,82 "
-        "(Спирмен), что необъяснимо для скидки 0,3–1,1 %. Разрез по градациям "
-        "показывает, что признак не монотонен по цене: медиана 16 млн ₽ при 0,3 %, "
-        "57 млн ₽ при 0,8 % и 89 млн ₽ при 0,5 % (всего 7 строк). Похоже, "
-        "градация скидки определяется договором продавца, а не свойством дома, "
-        "и потому работает прокси сегмента рынка. Признак доступен в момент "
-        "публикации и не является утечкой цели, но метрики могут быть завышены, "
-        "если один продавец встречается и в обучении, и в тесте. Проверяйте "
-        "устойчивость, обучая модель без `badge_*`.",
         "",
         "## Файлы",
         f"- Матрица признаков: `{features_path}`",
