@@ -11,7 +11,8 @@
 2. разведочный анализ и описательная статистика;
 3. построение признаков — от базовой пары «площадь дома и участка» до широкой матрицы;
 4. обучение и сравнение моделей: линейная регрессия как базовая и градиентный бустинг
-   как основная.
+   как основная;
+5. разбор худших предсказаний основной модели — топ объявлений по относительной ошибке.
 
 Числа (метрики, важности признаков, диагностика остатков) не дублируются в этом файле,
 чтобы не расходиться с кодом: отчёты EDA и признаков лежат в `reports/<этап>/`, а
@@ -472,6 +473,22 @@ python train_knn.py
 моделью, permutation importance и диагностику остатков. Пример запуска на своей матрице:
 `python train_knn.py --input data/features/features_rich.csv --experiments-dir experiments`.
 
+### 7. Разбор худших предсказаний → `experiments/<NN>/errors/`
+
+```bash
+python error_analitics.py --run-dir 01 --top-n 10
+```
+
+Скрипт ранжирует out-of-fold прогнозы запуска по модулю относительной ошибки к факту
+(`|прогноз − факт| / факт`) и складывает результат в подкаталог `errors/` того же запуска:
+`top_errors.csv` (топ с остатком, знаком ошибки и колонками-пояснениями из матрицы
+признаков), `error_summary.csv` (MAPE, медиана и квантили, смещение, вклад топа в
+абсолютную ошибку выборки, сравнение с базовой моделью), `figures/top_errors.png` и
+`report.md`. Сам запуск не меняется: `meta.json`, метрики и `index.csv` остаются прежними.
+
+Ключи: `--run-dir` (путь или номер; по умолчанию — последний запуск в `--experiments-dir`),
+`--top-n` (по умолчанию 10), `--output-dir` (по умолчанию `<каталог запуска>/errors`).
+
 ## Эксперименты
 
 Обучающие скрипты следуют общему контракту эксперимента
@@ -498,6 +515,7 @@ experiments/
     figures/                  факт-прогноз и остатки
     model.joblib              модель, обученная на всех данных (train_histgb.py)
     model_metadata.json       как её применять: признаки, expm1, обрезка прогноза
+    errors/                   разбор ошибок (error_analitics.py): топ, сводка, отчёт
   02/
   ...
 ```
@@ -529,6 +547,7 @@ Markdown сам — поэтому у всех запусков одинаков
 | Линейная модель | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `coefficients.csv`, `predictions.csv`, `figures/` |
 | Бустинг | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `feature_importance.csv`, `predictions.csv`, `model.joblib`, `model_metadata.json`, `figures/` |
 | kNN | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `feature_importance.csv`, `predictions.csv`, `tuning.csv`, `figures/` |
+| Разбор ошибок | `experiments/<NN>/errors/report.md` | `top_errors.csv`, `error_summary.csv`, `figures/top_errors.png` |
 
 ## Условия воспроизводимости
 

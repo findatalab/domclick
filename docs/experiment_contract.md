@@ -11,7 +11,9 @@
 
 Только обучающие запуски пишут в `experiments/`. Отчёты EDA и построения признаков
 (`eda.py`, `build_features*.py`, `build_reach_features.py`, `build_llm_extractions.py`,
-`build_embeddings.py`) по-прежнему пишут в `reports/<этап>/`.
+`build_embeddings.py`) по-прежнему пишут в `reports/<этап>/`. Пост-анализ ошибок
+(`error_analitics.py`) новый номер не занимает: он складывает результаты в подкаталог
+`errors/` уже существующего запуска (§2).
 
 ```
 experiments/
@@ -52,6 +54,12 @@ experiments/
 без чтения кода — `feature_columns` (состав и порядок колонок), `target_transform` /
 `prediction_transform` (лог и `expm1`), `clip_bounds_rub` (границы обрезки) и версии
 окружения.
+
+Подкаталог `errors/` в каталоге запуска — необязательный результат пост-анализа
+(`error_analitics.py`): топ-N объявлений по относительной ошибке (`top_errors.csv`),
+сводные числа (`error_summary.csv`), график и отчёт `report.md`. Анализ только читает
+`predictions.csv` и `meta.json`, поэтому карточка запуска, метрики и строка в
+`index.csv` не меняются; в `manifest.artifacts` он не попадает.
 
 Шапка отчёта, раздел «Ограничения» и список артефактов формируются автоматически из
 `meta.json`; скрипт добавляет только содержательные разделы и текст ограничений.
