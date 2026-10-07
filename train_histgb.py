@@ -20,15 +20,21 @@ Why this is not a copy of the linear-regression script
 4. Results follow the shared experiment contract: a numbered directory under
    `experiments/` with `meta.json`, `report.md` and canonical metric tables; the report
    plumbing lives in `report_utils.py` (see docs/experiment_contract.md).
+5. Besides the cross-validated estimate, one model is refit on every available row and
+   saved as `model.joblib` next to the report; `model_metadata.json` records the feature
+   order, the log back-transform and the prediction clip bounds, so the artifact can be
+   used without re-reading this script.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from pathlib import Path
 from typing import Any
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyRegressor
@@ -184,13 +190,67 @@ def tune_params(x_train: pd.DataFrame, y_train_log: pd.Series, groups_train: pd.
         print(f"  кандидат {index}/{len(candidates)}: RMSE(log) = {rows[-1]['rmse_log_mean']:.4f}")
 
     table = pd.DataFrame(rows).sort_values("rmse_log_mean").reset_index(drop=True)
-    best = {name: table.loc[0, name] for name in PARAM_DISTRIBUTIONS}
-    for name, values in PARAM_DISTRIBUTIONS.items():
-        if all(isinstance(value, int) for value in values):
-            best[name] = int(best[name])
-        else:
-            best[name] = float(best[name])
-    return best, table
+    return cast_params(table.loc[0]), table
+
+
+def cast_params(values: pd.Series) -> dict[str, Any]:
+    """Restore estimator types: integer grids stay integer, float grids stay float."""
+    return {
+        name: (int(values[name]) if all(isinstance(option, int) for option in options)
+               else float(values[name]))
+        for name, options in PARAM_DISTRIBUTIONS.items()
+    }
+
+
+def full_data_params(tuning: pd.DataFrame) -> dict[str, Any]:
+    """Hyperparameters for the model fitted on every row.
+
+    Tuning is per fold, so several candidates exist when `--tune` is on; the all-data
+    model takes the one with the lowest mean RMSE(log) across folds. Without tuning the
+    script defaults (an empty parameter dict) are used.
+    """
+    if tuning.empty:
+        return {}
+    grouped = (
+        tuning.groupby(list(PARAM_DISTRIBUTIONS), as_index=False)["rmse_log_mean"]
+        .mean().sort_values("rmse_log_mean")
+    )
+    return cast_params(grouped.iloc[0])
+
+
+def fit_full_data_model(x: pd.DataFrame, y: pd.Series, params: dict[str, Any], seed: int,
+                        max_iter: int) -> HistGradientBoostingRegressor:
+    """The shipped artifact: same recipe as the folds, but trained on all available rows."""
+    model = make_model(params, seed, max_iter)
+    model.fit(x, np.log(y.to_numpy(dtype=float)))
+    return model
+
+
+def save_model(run_dir: Path, model: HistGradientBoostingRegressor, *,
+               feature_columns: list[str], rows: int, params: dict[str, Any], seed: int,
+               clip_bounds: tuple[float, float] | None) -> list[str]:
+    """Write the fitted model and the card describing how to apply it."""
+    joblib.dump(model, run_dir / "model.joblib")
+    (run_dir / "model_metadata.json").write_text(
+        json.dumps(report_utils.json_safe({
+            "model_file": "model.joblib",
+            "model": MODEL_NAME,
+            "estimator": type(model).__name__,
+            "trained_on": "все строки входной матрицы, без отложенной части",
+            "rows_trained": int(rows),
+            "feature_columns": feature_columns,
+            "target": TARGET_COLUMN,
+            "target_transform": "log",
+            "prediction_transform": "expm1",
+            "clip_bounds_rub": clip_bounds,
+            "params": params,
+            "seed": int(seed),
+            "n_iter": int(model.n_iter_),
+            "environment": report_utils.environment_versions(),
+        }), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return ["model.joblib", "model_metadata.json"]
 
 
 def cross_validate(x: pd.DataFrame, y: pd.Series, groups: pd.Series, args: argparse.Namespace
@@ -291,6 +351,16 @@ def run(args: argparse.Namespace) -> None:
     summary = report_utils.metric_summary(metrics, METRIC_COLUMNS)
     summary_by_metric = summary.set_index("metric")
 
+    # Cross-validation scores the procedure, so the artifact kept for use is refit on all
+    # rows; its parameters come from the tuning, otherwise from the script defaults.
+    full_params = full_data_params(tuning)
+    full_model = fit_full_data_model(x, y, full_params, args.seed, args.max_iter)
+    clip_bounds = (float(y.min()), float(y.max())) if args.clip_predictions else None
+    model_artifacts = save_model(
+        run_dir, full_model, feature_columns=feature_columns, rows=len(x),
+        params=full_params, seed=args.seed, clip_bounds=clip_bounds,
+    )
+
     # Out-of-fold rows only; a listing scored twice would distort the diagnostics.
     oof = pd.DataFrame({
         IDENTIFIER_COLUMN: identifiers.reset_index(drop=True),
@@ -321,6 +391,16 @@ def run(args: argparse.Namespace) -> None:
     baseline_rmse = root_mean_squared_error(oof["actual_rub"], oof["baseline_rub"])
     nan_cells = int(x.isna().sum().sum())
     rows_with_nan = int(x.isna().any(axis=1).sum())
+    rows_text = f"{len(x):,}".replace(",", " ")
+    params_text = (
+        ", ".join(f"`{name}={value}`" for name, value in full_params.items())
+        if full_params else "значения по умолчанию (`--tune` не выполнялся)"
+    )
+    if clip_bounds:
+        clip_text = ("диапазон цен обучающей выборки "
+                     + f"{clip_bounds[0]:,.0f}–{clip_bounds[1]:,.0f} ₽".replace(",", " "))
+    else:
+        clip_text = "обрезка отключена (`--no-clip-predictions`)"
     if args.cv == "group":
         cv_note = (
             f"- Валидация групповая (`GroupKFold` по `{GROUP_COLUMN}`): объявления одного "
@@ -380,21 +460,37 @@ def run(args: argparse.Namespace) -> None:
             f"({rows_with_nan / len(x) * 100:.1f} %). Построчное удаление пропусков "
             f"оставило бы **{len(x) - rows_with_nan:,}** строк — HistGB сохраняет все данные.",
         ]),
+        report_utils.text_section("Модель для применения", [
+            "Кросс-валидация выше оценивает процедуру обучения, а не одну конкретную "
+            f"модель. Для применения сохранена модель, обученная на **всех {rows_text}** "
+            f"строках без отложенной части: `{run_id}/model.joblib`, карточка — "
+            "`model_metadata.json`.",
+            f"Модель ожидает колонки в том же составе и порядке, что и в матрице "
+            f"(`feature_columns` карточки, всего **{len(feature_columns)}**); пропуски "
+            "передаются как NaN, без заполнения.",
+            "Прогноз в рублях: `np.expm1(model.predict(X))`, затем обрезка по "
+            f"`clip_bounds_rub` ({clip_text}).",
+            f"Гиперпараметры: {params_text}.",
+            "Метрики этого запуска относятся к кросс-валидации, а не к сохранённой модели: "
+            "она обучена на всех строках, поэтому её ошибка на них же занижена.",
+        ]),
     )
     limitations = [
         "- `asking_price_rub` — цена предложения, а не подтверждённая цена сделки.",
         cv_note,
         "- Целевая переменная скошена (skew ≈ 9,8): RMSE сильно зависит от нескольких "
         "дорогих объектов, поэтому рядом приведены MAE и медианная ошибка.",
-        "- Прогнозы обрезаются по диапазону обучающей части фолда "
-        f"({'включено' if args.clip_predictions else 'выключено'}), "
-        "поэтому модель не выдаёт цены за пределами наблюдённого диапазона.",
+        "- Прогнозы обрезаются по диапазону цен: в метриках — по обучающей части фолда, "
+        f"у сохранённой модели — по всей выборке ({'включено' if args.clip_predictions else 'выключено'}), "
+        "поэтому ни модель, ни метрики не выходят за пределы наблюдённого диапазона.",
         "- Модель не экстраполирует: для объектов вне обучающего распределения "
         "(другой регион, другой тип недвижимости) прогноз не обоснован.",
+        "- Сохранённая модель обучена на всех строках, поэтому метрики запуска (по фолдам) "
+        "её качество не описывают.",
     ]
     artifacts = [
         "report.md", "metrics.csv", "fold_metrics.csv", "metrics_summary.csv",
-        "predictions.csv", "residual_diagnostics.csv",
+        "predictions.csv", "residual_diagnostics.csv", *model_artifacts,
         *(["feature_importance.csv"] if not importance.empty else []),
         *(["tuning.csv"] if not tuning.empty else []),
         *[f"figures/{path.name}" for path in charts],
@@ -423,6 +519,7 @@ def run(args: argparse.Namespace) -> None:
     print(f"MAE (rub): {summary_by_metric.loc['mae_rub', 'mean']:,.0f}".replace(",", " "))
     print(f"Baseline RMSE (rub): {baseline_rmse:,.0f}".replace(",", " "))
     print(f"Эксперимент: {run_dir}; реестр: {index_path}")
+    print(f"Модель (все данные): {run_dir / 'model.joblib'}")
 
 
 def parse_args() -> argparse.Namespace:

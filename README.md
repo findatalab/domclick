@@ -425,6 +425,30 @@ python train_histgb.py
 моделью предсказания среднего, permutation importance, посчитанную на тестовых фолдах,
 и диагностику остатков.
 
+Кросс-валидация оценивает процедуру обучения, поэтому рядом с отчётом сохраняется модель,
+переобученная на **всех** строках матрицы: `experiments/<NN>/model.joblib` и карточка
+`model_metadata.json` (порядок признаков, лог-преобразование цели, границы обрезки
+прогноза, гиперпараметры). Гиперпараметры берутся из результатов `--tune` (лучший
+кандидат по среднему RMSE на логе), иначе — значения по умолчанию. Метрики запуска к этой
+модели не относятся: она обучена на тех же строках, по которым считались фолды.
+
+```python
+import json
+from pathlib import Path
+
+import joblib
+import numpy as np
+import pandas as pd
+
+run = Path("experiments/01")
+card = json.loads((run / "model_metadata.json").read_text(encoding="utf-8"))
+model = joblib.load(run / card["model_file"])
+matrix = pd.read_csv("data/features/features_rich.csv")[card["feature_columns"]]
+prices = np.expm1(model.predict(matrix))
+if card["clip_bounds_rub"]:                       # диапазон цен обучающей выборки
+    prices = np.clip(prices, *card["clip_bounds_rub"])
+```
+
 ### 6. kNN-регрессия → `experiments/<NN>/`
 
 ```bash
@@ -472,6 +496,8 @@ experiments/
     predictions.csv           out-of-fold прогнозы
     residual_diagnostics.csv  ошибка и смещение по квартилям прогноза
     figures/                  факт-прогноз и остатки
+    model.joblib              модель, обученная на всех данных (train_histgb.py)
+    model_metadata.json       как её применять: признаки, expm1, обрезка прогноза
   02/
   ...
 ```
@@ -501,7 +527,7 @@ Markdown сам — поэтому у всех запусков одинаков
 | Признаки из текста (DeepSeek) | `reports/features_llm/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `llm_field_summary.csv` |
 | Эмбеддинги описаний | `data/features/embeddings_meta.json` | `embeddings.csv`, `embeddings.npy`, `embeddings_cache.jsonl` |
 | Линейная модель | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `coefficients.csv`, `predictions.csv`, `figures/` |
-| Бустинг | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `feature_importance.csv`, `predictions.csv`, `figures/` |
+| Бустинг | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `feature_importance.csv`, `predictions.csv`, `model.joblib`, `model_metadata.json`, `figures/` |
 | kNN | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `feature_importance.csv`, `predictions.csv`, `tuning.csv`, `figures/` |
 
 ## Условия воспроизводимости

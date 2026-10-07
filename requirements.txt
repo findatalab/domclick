@@ -4,5 +4,6 @@ Pillow>=10,<13
 pandas
 matplotlib
 scikit-learn
+joblib
 python-dotenv>=1,<2
 ollama
