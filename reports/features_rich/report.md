@@ -1,9 +1,9 @@
 # Широкий набор признаков из структурированных полей
 
-Источник: `C:\Users\developer\projects\domclick\data\dataset\objects.jsonl`
-Матрица: `C:\Users\developer\projects\domclick\data\features\features_rich.csv`
-Строк: **1,144**; колонок всего: **92** (признаков **88**, плюс `listing_id`, цель `asking_price_rub`, вариант цели `log_asking_price_rub` и ключ групп `group_locality`).
-Признаки: **21** числовых и **67** бинарных.
+Источник: `C:\Users\andrej\projects\finun\domclick\data\dataset\objects.jsonl`
+Матрица: `C:\Users\andrej\projects\finun\domclick\data\features\features_rich.csv`
+Строк: **1,144**; колонок всего: **85** (признаков **81**, плюс `listing_id`, цель `asking_price_rub`, вариант цели `log_asking_price_rub` и ключ групп `group_locality`).
+Признаки: **20** числовых и **61** бинарных.
 Битых строк JSON: **0**; строк без положительной цены отброшено: **0**.
 Текстовые флаги из описания: включены.
 
@@ -12,7 +12,6 @@
 | --- | --- |
 | categorical | 15 |
 | derived | 7 |
-| badges | 7 |
 | tags_seller | 7 |
 | text_location | 7 |
 | missing | 6 |
@@ -34,13 +33,12 @@
 Исключены все производные от цены колонки:
 - `price_per_m2_advertised` — рассчитывается из цены, попадёт в цель при обучении
 - `price_per_m2_computed` — рассчитывается из цены, попадёт в цель при обучении
-- метка «Выгодная цена» (`badge_good_price`) **не создаётся**: проверка показала, что внутри диапазонов площади такие объявления стоят в 10-м процентиле цены за м² (медиана 10,1; 79 % — в самом дешёвом квартиле, 0 % — в самом дорогом). Платформа вычисляет эту метку из цены, поэтому она является утечкой цели. Метка исключена и из `badge_count`.
-- признак `badge_mortgage_discount_pct` (градация скидки на ипотеку) **не создаётся**: корреляция с ценой 0,82 (Спирмен), разрез по градациям немонотонен (медиана 16 млн ₽ при 0,3 %, 57 млн ₽ при 0,8 % и 89 млн ₽ при 0,5 %, всего 7 строк). Похоже, градация определяется договором продавца, а не свойством дома, то есть это прокси сегмента рынка. Признак исключён из набора.
-Остальные метки платформы проверены тем же способом и оставлены: их медианный процентиль цены за м² внутри диапазонов площади 42,9–58,1, то есть связи с относительной ценой нет.
+- признаки меток площадки (`badges_platform_claimed`) **не создаются**: метка «Выгодная цена» вычисляется площадкой по относительной цене (медианный процентиль цены за м² 10,1 внутри диапазонов площади; 79 % таких объявлений — в самом дешёвом квартиле, 0 % — в самом дорогом), то есть повторяет цель; метка `badge_mortgage_discount_pct` связана с ценой немонотонно (Спирмен 0,82). Поле не используется ни отдельными флагами `badge_*`, ни счётчиком меток.
 Также исключены:
 - `seller_name` — заполнено в 40 строках (2,2 %) — слишком мало для признака
 - `seller_type` — заполнено в 40 строках (2,2 %) — слишком мало для признака
 - `conflicts` — непустое значение в 1 строке — признака не получится
+- `badges_platform_claimed` — метки площадки не используются: слабый сигнал, а «Выгодная цена» вычисляется из цены (утечка цели)
 - `photo_urls` — используется только длина и сверка с photo_count_advertised
 - `photo_paths` — пусто в 1815 строках (97,7 %) — артефакт скачивания, не свойство объекта
 - `sources` — используется только число источников
@@ -81,7 +79,7 @@
 - Важность признаков (permutation importance) распределена крайне неравномерно: `house_area_m2` даёт около 0,68 падения R², `distance_to_mkad_km` — 0,078, `house_area_per_floor` — 0,034, остальные меньше 0,03. Признаки из описания слабые (лучший `txt_*` — около 0,008), но не бесполезные.
 
 ## Файлы
-- Матрица признаков: `C:\Users\developer\projects\domclick\data\features\features_rich.csv`
-- Словарь признаков: `C:\Users\developer\projects\domclick\reports\features_rich\feature_dictionary.csv`
-- Покрытие и статистика: `C:\Users\developer\projects\domclick\reports\features_rich\feature_coverage.csv`
-- Отчёт: `C:\Users\developer\projects\domclick\reports\features_rich\report.md`
+- Матрица признаков: `C:\Users\andrej\projects\finun\domclick\data\features\features_rich.csv`
+- Словарь признаков: `C:\Users\andrej\projects\finun\domclick\reports\features_rich\feature_dictionary.csv`
+- Покрытие и статистика: `C:\Users\andrej\projects\finun\domclick\reports\features_rich\feature_coverage.csv`
+- Отчёт: `C:\Users\andrej\projects\finun\domclick\reports\features_rich\report.md`

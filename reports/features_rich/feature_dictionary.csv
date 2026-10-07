@@ -28,13 +28,6 @@ tag_near_water,tags_seller,flag,tags_seller_claimed,"метка заявлена
 tag_near_forest,tags_seller,flag,tags_seller_claimed,"метка заявлена продавцом, не проверена"
 land_use_izhs,tags_seller,flag,land_use_label,
 land_use_missing,tags_seller,flag,land_use_label,
-badge_report_domclick,badges,flag,badges_platform_claimed,"метка платформы, слабый сигнал"
-badge_rosreestr_checked,badges,flag,badges_platform_claimed,"метка платформы, слабый сигнал"
-badge_privileges,badges,flag,badges_platform_claimed,"метка платформы, слабый сигнал"
-badge_mortgage_approved,badges,flag,badges_platform_claimed,"метка платформы, слабый сигнал"
-badge_owner,badges,flag,badges_platform_claimed,"метка платформы, слабый сигнал"
-badge_only_domclick,badges,flag,badges_platform_claimed,"метка платформы, слабый сигнал"
-badge_count,badges,count,badges_platform_claimed,число меток без учёта «Выгодной цены» (она исключена как утечка)
 highway_00,categorical,one_hot,highway,уровень: боровское шоссе (61 строк)
 highway_01,categorical,one_hot,highway,уровень: варшавское шоссе (78 строк)
 highway_02,categorical,one_hot,highway,уровень: волоколамское шоссе (15 строк)

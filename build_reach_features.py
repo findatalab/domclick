@@ -47,12 +47,6 @@ NON_FEATURE_COLUMNS = (IDENTIFIER_COLUMN, TARGET_COLUMN, LOG_TARGET_COLUMN, GROU
 # Any column computed from the price would leak the target into the features.
 LEAKAGE_COLUMNS = ("price_per_m2_advertised", "price_per_m2_computed")
 
-# Platform badges that the platform itself derives from the price, verified on this data:
-# "Выгодная цена" marks listings whose price per m² sits in the bottom ~10 % of their size
-# bucket (median percentile 10.1; 79 % of flagged rows fall in the cheapest quartile,
-# 0 % in the most expensive). Keeping it would hand the model price ÷ area, i.e. the target.
-LEAKAGE_BADGE_TEXTS = ("выгодная цена",)
-
 # Constants in this export: no information, so they are dropped automatically.
 CONSTANT_COLUMNS = ("object_type", "price_type", "currency")
 
@@ -61,6 +55,8 @@ DROPPED_COLUMNS = {
     "seller_name": "заполнено в 40 строках (2,2 %) — слишком мало для признака",
     "seller_type": "заполнено в 40 строках (2,2 %) — слишком мало для признака",
     "conflicts": "непустое значение в 1 строке — признака не получится",
+    "badges_platform_claimed": "метки площадки не используются: слабый сигнал, а «Выгодная "
+                               "цена» вычисляется из цены (утечка цели)",
     "photo_urls": "используется только длина и сверка с photo_count_advertised",
     "photo_paths": "пусто в 1815 строках (97,7 %) — артефакт скачивания, не свойство объекта",
     "sources": "используется только число источников",
@@ -76,17 +72,6 @@ TAG_FLAGS = (
     ("electricity", r"электричество"),
     ("near_water", r"рядом водоём"),
     ("near_forest", r"рядом лес"),
-)
-
-BADGE_FLAGS = (
-    ("badge_report_domclick", "отчёт домклик"),
-    ("badge_rosreestr_checked", "проверено в росреестре"),
-    ("badge_privileges", "привилегии домклик"),
-    # "Выгодная цена" намеренно отсутствует: метка вычисляется платформой из цены,
-    # см. LEAKAGE_BADGE_TEXTS.
-    ("badge_mortgage_approved", "одобрено в ипотеку"),
-    ("badge_owner", "собственник"),
-    ("badge_only_domclick", "только на домклик"),
 )
 
 LOCALITY_TYPES = (
@@ -431,21 +416,6 @@ def build_features(raw: pd.DataFrame, options: argparse.Namespace) -> FeatureBui
     builder.add_flag("land_use_missing", land_use.map(lambda value: not as_list(value)),
                      "tags_seller", "flag", "land_use_label")
 
-    # --- platform badge flags -------------------------------------------------
-    badges_raw = raw.get("badges_platform_claimed", pd.Series([[]] * len(raw), index=index))
-    # Price-derived badges are stripped before any badge feature is built, so they cannot
-    # leak through the individual flags or through badge_count.
-    badges = badges_raw.map(lambda items: [
-        item for item in as_list(items)
-        if not any(text in str(item).lower() for text in LEAKAGE_BADGE_TEXTS)
-    ])
-    for name, pattern in BADGE_FLAGS:
-        builder.add_flag(name, list_flags(badges, pattern), "badges", "flag",
-                         "badges_platform_claimed", "метка платформы, слабый сигнал")
-    builder.add("badge_count", badges.map(lambda value: float(len(as_list(value)))),
-                "badges", "count", "badges_platform_claimed",
-                "число меток без учёта «Выгодной цены» (она исключена как утечка)")
-
     # --- one-hot: highway, locality type, settlement type ---------------------
     one_hot(text(raw, "highway"), "highway", builder, "categorical", "highway",
             options.one_hot_min_count)
@@ -649,20 +619,12 @@ def run(input_path: Path, features_path: Path, report_dir: Path,
         "Исключены все производные от цены колонки:",
         *[f"- `{column}` — рассчитывается из цены, попадёт в цель при обучении" 
           for column in LEAKAGE_COLUMNS],
-        "- метка «Выгодная цена» (`badge_good_price`) **не создаётся**: проверка показала, "
-        "что внутри диапазонов площади такие объявления стоят в 10-м процентиле цены за м² "
-        "(медиана 10,1; 79 % — в самом дешёвом квартиле, 0 % — в самом дорогом). "
-        "Платформа вычисляет эту метку из цены, поэтому она является утечкой цели. "
-        "Метка исключена и из `badge_count`.",
-        "- признак `badge_mortgage_discount_pct` (градация скидки на ипотеку) "
-        "**не создаётся**: корреляция с ценой 0,82 (Спирмен), разрез по градациям "
-        "немонотонен (медиана 16 млн ₽ при 0,3 %, 57 млн ₽ при 0,8 % и 89 млн ₽ "
-        "при 0,5 %, всего 7 строк). Похоже, градация определяется договором "
-        "продавца, а не свойством дома, то есть это прокси сегмента рынка. "
-        "Признак исключён из набора.",
-        "Остальные метки платформы проверены тем же способом и оставлены: их медианный "
-        "процентиль цены за м² внутри диапазонов площади 42,9–58,1, то есть связи "
-        "с относительной ценой нет.",
+        "- признаки меток площадки (`badges_platform_claimed`) **не создаются**: метка "
+        "«Выгодная цена» вычисляется площадкой по относительной цене (медианный процентиль "
+        "цены за м² 10,1 внутри диапазонов площади; 79 % таких объявлений — в самом дешёвом "
+        "квартиле, 0 % — в самом дорогом), то есть повторяет цель; метка "
+        "`badge_mortgage_discount_pct` связана с ценой немонотонно (Спирмен 0,82). "
+        "Поле не используется ни отдельными флагами `badge_*`, ни счётчиком меток.",
         "Также исключены:",
         *[f"- `{column}` — {reason}" for column, reason in DROPPED_COLUMNS.items()],
         f"Константные и неинформативные колонки, удалённые автоматически: "
