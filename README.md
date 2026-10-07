@@ -398,6 +398,55 @@ python train_histgb.py --input data/features/features_v2.csv
 — примерно 20–25 секунд на объявление, то есть ~7 часов без `--parallel`. Прогресс виден
 в консоли по умолчанию, а прерванный прогон продолжается той же командой с того же места.
 
+### 3.5. Компактная матрица v3: признаки и чистка по разбору ошибок → `data/features/features_v3.csv`, `reports/features_v3/`
+
+```bash
+python build_features_v3.py                     # матрица со всеми строками
+python build_features_v3.py --drop-implausible-price --drop-duplicate-listings
+```
+
+v3 — это v2 плюс правки по разбору ошибок запуска 03 (`experiments/03/errors/report.md`):
+
+- **текстовые флаги описания** (`txt_*`: дача, СНТ, доля, отсутствие регистрации,
+  срочность, обременение, новый дом, асфальт, рядом водоём/лес, ипотека) и **метки
+  продавца** (`tag_*` из `tags_seller_claimed`) — их в v2 не было. Совпадения ищутся
+  движком Python `re`, поэтому `\b` корректно работает с кириллицей (у pandas 3 на
+  pyarrow-строках `\b`/`\w` — ASCII-only, и такие флаги молча не строились). Отключаются
+  ключом `--no-text-features`;
+- **«неизвестно» и «нет» различаются**: явное отрицание («нет газа», `absent`,
+  «выгребная яма») даёт отрицательный уровень группы, а нераспознанный ответ — явный
+  уровень `unknown`. В v2 ответ `unknown` по газу (300 строк) попадал в «газа нет»;
+- **флаги расхождений** карточки и извлечения: `house_area_m2_disagreement`,
+  `distance_to_mkad_km_disagreement`, `land_area_sotka_disagreement`,
+  `floors_disagreement`, `highway_disagreement`;
+- **производные признаки**: `free_land_sotka`, `bedrooms_per_100m2`,
+  `bathrooms_per_100m2`, `house_is_new` (дом не старше трёх лет);
+- **редкие уровни** реже `--min-level-count` (по умолчанию 20) и почти постоянные флаги
+  карточки выше `--max-flag-share` (по умолчанию 0.98) в матрицу не попадают; списки —
+  в отчёте, `--min-level-count 0 --max-flag-share 1` возвращают полную схему v2;
+- **качество данных**: отчёт считает цену за м² (`implausible_price.csv`), дубликаты по
+  (площадь, участок, этажи, расстояние, цена) с пометкой групп из разных населённых
+  пунктов (`duplicates.csv`) и концентрацию цен у верхней границы. Чистка строк —
+  отдельные ключи `--drop-implausible-price` (цена за м² вне 15–400 тыс. ₽) и
+  `--drop-duplicate-listings`; отброшенные строки всегда перечислены в `dropped_rows.csv`.
+
+Извлечения у v3 те же, что у v2, поэтому кэш `llm_v2_extractions.jsonl` переиспользуется
+и полный прогон **не обращается к модели** (в отличие от часов у v2). Прогон без модели
+(`--no-llm`) тоже даёт обучаемую матрицу: пустые колонки групп исключаются автоматически
+(в v2 их приходилось убирать вручную). Схема служебных колонок не изменилась, поэтому
+обучающие скрипты принимают матрицу напрямую:
+
+```bash
+python train_histgb.py --input data/features/features_v3.csv
+```
+
+Измеренный эффект на этом датасете (5 фолдов, один и тот же seed; на одних и тех же 1128
+строках): новые признаки v3 дают −0,2 % RMSE / +1 % MAE, то есть на 1144 объявлениях это
+в пределах шума (`--folds 10` уменьшит разброс), а **чистка 16 строк даёт −2,9 % RMSE и
+R² 0,690 → 0,707**. Топ относительных ошибок после чистки — по-прежнему дачный сегмент
+(2,7–6,3 млн ₽), для него нужен отдельный сигнал: эмбеддинги описаний (п. 3.2) или
+сегментная модель.
+
 ### 4. Базовая модель: линейная регрессия → `experiments/<NN>/`
 
 ```bash
@@ -542,6 +591,7 @@ Markdown сам — поэтому у всех запусков одинаков
 | Широкие признаки | `reports/features_rich/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
 | Компактные признаки (каркас + 10 групп) | `reports/features_v1/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
 | Компактная матрица v2 (каркас + группы из локальной модели) | `reports/features_v2/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `extraction_summary.csv`, `feature_levels.csv`, `value_ranges.csv` |
+| Компактная матрица v3 (v2 + текстовые флаги и чистка данных) | `reports/features_v3/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `extraction_summary.csv`, `feature_levels.csv`, `value_ranges.csv`, `implausible_price.csv`, `duplicates.csv`, `dropped_rows.csv` |
 | Признаки из текста (DeepSeek) | `reports/features_llm/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `llm_field_summary.csv` |
 | Эмбеддинги описаний | `data/features/embeddings_meta.json` | `embeddings.csv`, `embeddings.npy`, `embeddings_cache.jsonl` |
 | Линейная модель | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `coefficients.csv`, `predictions.csv`, `figures/` |
