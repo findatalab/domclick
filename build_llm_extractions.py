@@ -8,9 +8,9 @@ Output:  data/features/features_llm.csv — `listing_id` plus numeric `llm_*`
          report.
 
 The matrix holds only LLM-derived features and the join key. For training it is
-merged with the structured matrix produced by `build_reach_features.py`:
+merged with the structured matrix produced by `build_features_v0.py`:
 
-    structured = pd.read_csv("data/features/features_rich.csv")
+    structured = pd.read_csv("data/features/features_v0.csv")
     llm = pd.read_csv("data/features/features_llm.csv")
     matrix = structured.merge(llm, on="listing_id", how="left")
 
@@ -1342,11 +1342,11 @@ def run(input_path: Path, features_path: Path, report_dir: Path,
         f"Битых строк JSON: **{invalid_lines}**.",
         "",
         "Матрица содержит только ключ `listing_id` и признаки `llm_*`. Для обучения она "
-        "соединяется со структурной матрицей `data/features/features_rich.csv` по "
+        "соединяется со структурной матрицей `data/features/features_v0.csv` по "
         "`listing_id`:",
         "",
         "```python",
-        'structured = pd.read_csv("data/features/features_rich.csv")',
+        'structured = pd.read_csv("data/features/features_v0.csv")',
         'llm = pd.read_csv("data/features/features_llm.csv")',
         'matrix = structured.merge(llm, on="listing_id", how="left")',
         "```",

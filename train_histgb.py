@@ -3,7 +3,7 @@
 
 Model:   sklearn HistGradientBoostingRegressor (gradient boosting on trees) with
          early stopping on an internal validation split.
-Data:    data/features/features_rich.csv (produced by build_reach_features.py).
+Data:    data/features/features_v0.csv (produced by build_features_v0.py).
 Target:  asking_price_rub, trained on the log scale and scored on the ruble scale.
 CV:      GroupKFold by `group_locality` so listings from one locality never split
          between train and test; use --cv kfold only for a quicker comparison.
@@ -74,8 +74,8 @@ PARAM_DISTRIBUTIONS = {
 
 
 def default_input_path() -> Path:
-    """Where build_reach_features.py writes the modeling matrix."""
-    return Path(__file__).resolve().parent / "data" / "features" / "features_rich.csv"
+    """Where build_features_v0.py writes the modeling matrix."""
+    return Path(__file__).resolve().parent / "data" / "features" / "features_v0.csv"
 
 
 def load_data(path: Path) -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series, list[str]]:
@@ -87,7 +87,7 @@ def load_data(path: Path) -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series
         frame = pd.read_csv(path)
     except FileNotFoundError as exc:
         raise SystemExit(
-            f"Не найден файл признаков: {path}\nСначала запустите build_reach_features.py."
+            f"Не найден файл признаков: {path}\nСначала запустите build_features_v0.py."
         ) from exc
     except OSError as exc:
         raise SystemExit(f"Не удалось прочитать {path}: {exc}") from exc
@@ -524,11 +524,11 @@ def run(args: argparse.Namespace) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Обучение HistGradientBoosting на features_rich.csv с кросс-валидацией."
+        description="Обучение HistGradientBoosting на features_v0.csv с кросс-валидацией."
     )
     parser.add_argument(
         "--input", type=Path, default=default_input_path(),
-        help="Матрица признаков (по умолчанию data/features/features_rich.csv).",
+        help="Матрица признаков (по умолчанию data/features/features_v0.csv).",
     )
     parser.add_argument(
         "--experiments-dir", type=Path, default=report_utils.default_experiments_dir(__file__),

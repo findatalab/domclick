@@ -110,7 +110,7 @@ python -m venv .venv
 
 Все скрипты запускаются из корня репозитория. Скрипты анализа принимают `--input`
 (по умолчанию `data/dataset/objects.jsonl`), каталог отчётов — `--output-dir`
-(в `build_reach_features.py` и `build_reach_llm_features.py` — `--report-dir`)
+(в `build_features_v0.py` и `build_reach_llm_features.py` — `--report-dir`)
 и `--verbose`. Обучающие скрипты принимают `--input`, `--experiments-dir` (корень
 экспериментов) и `--verbose`. Сборщик датасета принимает
 позиционный путь к выгрузкам и `--output`.
@@ -150,10 +150,10 @@ python build_features.py
 `asking_price_rub`. Проверяет знаки и положительность значений, считает покрытие и
 корреляции. `--fill-missing {drop,median}` управляет обработкой строк без площади участка.
 
-### 3. Широкая матрица признаков → `data/features/features_rich.csv`, `reports/features_rich/`
+### 3. Широкая матрица признаков → `data/features/features_v0.csv`, `reports/features_v0/`
 
 ```bash
-python build_reach_features.py
+python build_features_v0.py
 ```
 
 Основной набор признаков: сырые числовые поля и производные отношения и логарифмы,
@@ -167,7 +167,7 @@ python build_reach_features.py
 `GroupKFold`). Пропуски **не заполняются**: рядом с неполными полями добавлены
 индикаторы `*_missing`, а NaN обрабатывает сама модель.
 
-`reports/features_rich/feature_dictionary.csv` описывает каждую колонку, а
+`reports/features_v0/feature_dictionary.csv` описывает каждую колонку, а
 `feature_coverage.csv` — покрытие и статистику по ней.
 
 ### 3.1. Признаки из текста объявления (DeepSeek API) → `data/features/features_llm.csv`, `reports/features_llm/`
@@ -188,7 +188,7 @@ python build_reach_llm_features.py                 # полный прогон, 
 в ней нет. Для обучения она соединяется со структурной матрицей из п. 3:
 
 ```python
-structured = pd.read_csv("data/features/features_rich.csv")
+structured = pd.read_csv("data/features/features_v0.csv")
 llm = pd.read_csv("data/features/features_llm.csv")
 matrix = structured.merge(llm, on="listing_id", how="left")
 ```
@@ -493,7 +493,7 @@ import pandas as pd
 run = Path("experiments/01")
 card = json.loads((run / "model_metadata.json").read_text(encoding="utf-8"))
 model = joblib.load(run / card["model_file"])
-matrix = pd.read_csv("data/features/features_rich.csv")[card["feature_columns"]]
+matrix = pd.read_csv("data/features/features_v0.csv")[card["feature_columns"]]
 prices = np.expm1(model.predict(matrix))
 if card["clip_bounds_rub"]:                       # диапазон цен обучающей выборки
     prices = np.clip(prices, *card["clip_bounds_rub"])
@@ -520,7 +520,7 @@ python train_knn.py
 
 Отчёт содержит метрики на лог-шкале и в рублях, разбивку по фолдам, сравнение с базовой
 моделью, permutation importance и диагностику остатков. Пример запуска на своей матрице:
-`python train_knn.py --input data/features/features_rich.csv --experiments-dir experiments`.
+`python train_knn.py --input data/features/features_v0.csv --experiments-dir experiments`.
 
 ### 7. Разбор худших предсказаний → `experiments/<NN>/errors/`
 
@@ -588,7 +588,7 @@ Markdown сам — поэтому у всех запусков одинаков
 | --- | --- | --- |
 | EDA | `reports/eda/report.md` | `price_distribution.csv`, `numeric_summary.csv`, `outliers_iqr.csv`, `spearman_correlations.csv`, `figures/` |
 | Базовые признаки | `reports/features/report.md` | `feature_summary.csv`, `feature_correlations.csv` |
-| Широкие признаки | `reports/features_rich/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
+| Широкие признаки | `reports/features_v0/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
 | Компактные признаки (каркас + 10 групп) | `reports/features_v1/report.md` | `feature_dictionary.csv`, `feature_coverage.csv` |
 | Компактная матрица v2 (каркас + группы из локальной модели) | `reports/features_v2/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `extraction_summary.csv`, `feature_levels.csv`, `value_ranges.csv` |
 | Компактная матрица v3 (v2 + текстовые флаги и чистка данных) | `reports/features_v3/report.md` | `feature_dictionary.csv`, `feature_coverage.csv`, `extraction_summary.csv`, `feature_levels.csv`, `value_ranges.csv`, `implausible_price.csv`, `duplicates.csv`, `dropped_rows.csv` |
@@ -614,7 +614,7 @@ Markdown сам — поэтому у всех запусков одинаков
   в отчётах рядом приведены MAE и медианная абсолютная ошибка.
 - Отчёты EDA и признаков пересоздаются запуском скрипта поверх прежних результатов:
   чтобы сохранить прежний прогон, укажите другой `--output-dir` (в
-  `build_reach_features.py` — `--report-dir`). Обучающие запуски не перезаписываются:
+  `build_features_v0.py` — `--report-dir`). Обучающие запуски не перезаписываются:
   каждый получает новый номер в `experiments/`.
 
 ## Целостность данных и известные ловушки
@@ -666,7 +666,7 @@ Markdown сам — поэтому у всех запусков одинаков
 - Отсутствие утечки целевой переменной: производные цены не попадают в признаки,
   метка «Выгодная цена» проверена и исключена.
 - Стабильность признаков: словарь и покрытие пересобираются из данных
-  (`reports/features_rich/`); повтор имени признака вызывает ошибку, константные колонки
+  (`reports/features_v0/`); повтор имени признака вызывает ошибку, константные колонки
   удаляются автоматически.
 
 Сообщено автором скрипта сборки (отдельно не перепроверялось в этом прогоне):

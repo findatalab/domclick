@@ -10,7 +10,7 @@
 ## 1. Где лежат результаты
 
 Только обучающие запуски пишут в `experiments/`. Отчёты EDA и построения признаков
-(`eda.py`, `build_features*.py`, `build_reach_features.py`, `build_llm_extractions.py`,
+(`eda.py`, `build_features*.py`, `build_features_v0.py`, `build_llm_extractions.py`,
 `build_embeddings.py`) по-прежнему пишут в `reports/<этап>/`. Пост-анализ ошибок
 (`error_analitics.py`) новый номер не занимает: он складывает результаты в подкаталог
 `errors/` уже существующего запуска (§2).
@@ -75,7 +75,7 @@ experiments/
   "model": "histgb",
   "git": { "commit": "a1b2c3d", "dirty": false },
   "data": {
-    "input": "data/features/features_rich.csv",
+    "input": "data/features/features_v0.csv",
     "input_sha256": "9f2c…",
     "extra_inputs": { "embeddings": "data/features/embeddings.csv" },
     "rows": 1858,

@@ -2,8 +2,8 @@
 """Build a wide, leakage-free feature matrix for house-price models.
 
 Source:  data/dataset/objects.jsonl (structured fields of the Domclick export).
-Output:  data/features/features_rich.csv — one row per listing, numeric only.
-         reports/features_rich/ — feature dictionary, coverage, report.
+Output:  data/features/features_v0.csv — one row per listing, numeric only.
+         reports/features_v0/ — feature dictionary, coverage, report.
 
 Design rules
 ------------
@@ -34,7 +34,7 @@ import numpy as np
 import pandas as pd
 
 
-LOG = logging.getLogger("domclick.rich")
+LOG = logging.getLogger("domclick.features_v0")
 
 IDENTIFIER_COLUMN = "listing_id"
 TARGET_COLUMN = "asking_price_rub"
@@ -176,12 +176,12 @@ def default_input_path() -> Path:
 
 def default_features_path() -> Path:
     """Modeling matrices belong in data/, next to the source dataset."""
-    return Path(__file__).resolve().parent / "data" / "features" / "features_rich.csv"
+    return Path(__file__).resolve().parent / "data" / "features" / "features_v0.csv"
 
 
 def default_report_dir() -> Path:
     """Reports belong in reports/, separate from the data."""
-    return Path(__file__).resolve().parent / "reports" / "features_rich"
+    return Path(__file__).resolve().parent / "reports" / "features_v0"
 
 
 def read_jsonl(path: Path) -> tuple[pd.DataFrame, int]:
@@ -708,11 +708,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--features-file", type=Path, default=default_features_path(),
-        help="Куда записать матрицу признаков (по умолчанию data/features/features_rich.csv).",
+        help="Куда записать матрицу признаков (по умолчанию data/features/features_v0.csv).",
     )
     parser.add_argument(
         "--report-dir", type=Path, default=default_report_dir(),
-        help="Каталог для отчёта и словаря (по умолчанию reports/features_rich).",
+        help="Каталог для отчёта и словаря (по умолчанию reports/features_v0).",
     )
     parser.add_argument(
         "--one-hot-min-count", type=int, default=10,

@@ -1,7 +1,7 @@
 # Широкий набор признаков из структурированных полей
 
 Источник: `C:\Users\andrej\projects\finun\domclick\data\dataset\objects.jsonl`
-Матрица: `C:\Users\andrej\projects\finun\domclick\data\features\features_rich.csv`
+Матрица: `C:\Users\andrej\projects\finun\domclick\data\features\features_v0.csv`
 Строк: **1,144**; колонок всего: **85** (признаков **81**, плюс `listing_id`, цель `asking_price_rub`, вариант цели `log_asking_price_rub` и ключ групп `group_locality`).
 Признаки: **20** числовых и **61** бинарных.
 Битых строк JSON: **0**; строк без положительной цены отброшено: **0**.
@@ -79,7 +79,7 @@
 - Важность признаков (permutation importance) распределена крайне неравномерно: `house_area_m2` даёт около 0,68 падения R², `distance_to_mkad_km` — 0,078, `house_area_per_floor` — 0,034, остальные меньше 0,03. Признаки из описания слабые (лучший `txt_*` — около 0,008), но не бесполезные.
 
 ## Файлы
-- Матрица признаков: `C:\Users\andrej\projects\finun\domclick\data\features\features_rich.csv`
-- Словарь признаков: `C:\Users\andrej\projects\finun\domclick\reports\features_rich\feature_dictionary.csv`
-- Покрытие и статистика: `C:\Users\andrej\projects\finun\domclick\reports\features_rich\feature_coverage.csv`
-- Отчёт: `C:\Users\andrej\projects\finun\domclick\reports\features_rich\report.md`
+- Матрица признаков: `C:\Users\andrej\projects\finun\domclick\data\features\features_v0.csv`
+- Словарь признаков: `C:\Users\andrej\projects\finun\domclick\reports\features_v0\feature_dictionary.csv`
+- Покрытие и статистика: `C:\Users\andrej\projects\finun\domclick\reports\features_v0\feature_coverage.csv`
+- Отчёт: `C:\Users\andrej\projects\finun\domclick\reports\features_v0\report.md`

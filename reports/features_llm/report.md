@@ -6,10 +6,10 @@
 Признаки: **23** числовых и **94** бинарных.
 Битых строк JSON: **0**.
 
-Матрица содержит только ключ `listing_id` и признаки `llm_*`. Для обучения она соединяется со структурной матрицей `data/features/features_rich.csv` по `listing_id`:
+Матрица содержит только ключ `listing_id` и признаки `llm_*`. Для обучения она соединяется со структурной матрицей `data/features/features_v0.csv` по `listing_id`:
 
 ```python
-structured = pd.read_csv("data/features/features_rich.csv")
+structured = pd.read_csv("data/features/features_v0.csv")
 llm = pd.read_csv("data/features/features_llm.csv")
 matrix = structured.merge(llm, on="listing_id", how="left")
 ```

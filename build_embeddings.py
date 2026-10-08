@@ -14,7 +14,7 @@ Model:   qwen3-embedding:8b via the Ollama HTTP API (`POST /api/embed`).
 The matrix holds only the join key and embedding columns. For training it is merged
 with the structured and LLM feature matrices on `listing_id`:
 
-    structured = pd.read_csv("data/features/features_rich.csv")
+    structured = pd.read_csv("data/features/features_v0.csv")
     llm = pd.read_csv("data/features/features_llm.csv")
     emb = pd.read_csv("data/features/embeddings.csv")
     matrix = structured.merge(llm, on="listing_id", how="left")
