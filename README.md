@@ -538,6 +538,26 @@ python error_analitics.py --run-dir 01 --top-n 10
 Ключи: `--run-dir` (путь или номер; по умолчанию — последний запуск в `--experiments-dir`),
 `--top-n` (по умолчанию 10), `--output-dir` (по умолчанию `<каталог запуска>/errors`).
 
+### 8. Рисунки для статьи → `docs/figures/`
+
+```bash
+python draw_figures.py
+```
+
+Скрипт не обучает моделей и не читает сырые выгрузки: он собирает рисунки статьи из уже
+сохранённых артефактов — метрик и прогнозов запусков `experiments/01`–`03`, таблицы
+распределения цены `reports/eda/price_distribution.csv` и матриц
+`data/features/features_v0.csv`, `features_v1.csv`. Готовые изображения складываются в
+`docs/figures/` и подключены в `docs/paper_plan.md`: распределение цены (рисунок 1),
+сравнение конфигураций по RMSE и MAPE (рисунок 2), факт-прогноз (рисунок 3), точность и
+число признаков (рисунок 4), перестановочная важность (рисунок 5), остатки и ошибка по
+квартилям (рисунок 6), покрытие извлечённых полей (рисунок 7).
+
+Соответствие конфигураций статьи (`features_v0`, `features_v1`, `features_v2`) запускам
+реестра задано в `CONFIGURATIONS` и сверяется по числу признаков из `meta.json`, поэтому
+переименование каталогов `experiments/` не подменяет данные молча. Ключи: `--output-dir`
+(по умолчанию `docs/figures`), `--dpi` (по умолчанию 200).
+
 ## Эксперименты
 
 Обучающие скрипты следуют общему контракту эксперимента
@@ -598,6 +618,7 @@ Markdown сам — поэтому у всех запусков одинаков
 | Бустинг | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `feature_importance.csv`, `predictions.csv`, `model.joblib`, `model_metadata.json`, `figures/` |
 | kNN | `experiments/<NN>/report.md` | `meta.json`, `metrics.csv`, `metrics_summary.csv`, `feature_importance.csv`, `predictions.csv`, `tuning.csv`, `figures/` |
 | Разбор ошибок | `experiments/<NN>/errors/report.md` | `top_errors.csv`, `error_summary.csv`, `figures/top_errors.png` |
+| Рисунки статьи | `docs/paper_plan.md` | `docs/figures/fig01–fig07`, `draw_figures.py` |
 
 ## Условия воспроизводимости
 
